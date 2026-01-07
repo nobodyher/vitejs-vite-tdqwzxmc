@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Users,
   LogOut,
@@ -18,55 +18,105 @@ import {
   DollarSign,
   TrendingUp,
   Percent,
-  AlertCircle,
   Wallet,
   CreditCard,
 } from "lucide-react";
 
 import {
   runTransaction,
-  setDoc,
   collection,
   onSnapshot,
   query,
   orderBy,
   addDoc,
   updateDoc,
-  deleteDoc,
   doc,
   serverTimestamp,
-  where,
-  getDocs,
+  DocumentData,
 } from "firebase/firestore";
 
 import { db } from "./firebase";
 
-const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+// ====== TIPOS ======
+type Role = "owner" | "staff";
+
+type User = {
+  id: string;
+  name: string;
+  pin: string;
+  role: Role;
+  color: string;
+  icon: "crown" | "user";
+  commissionPct: number;
+  active: boolean;
+};
+
+type PaymentMethod = "cash" | "transfer";
+
+type Service = {
+  id: string;
+  date: string;
+  client: string;
+  service: string;
+  cost: number;
+  userId: string;
+  userName: string;
+  paymentMethod: PaymentMethod;
+  commissionPct: number;
+  deleted?: boolean;
+};
+
+type Expense = {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  amount: number;
+  deleted?: boolean;
+};
+
+type Toast = { type: "success" | "error" | "info"; message: string };
+
+type OwnerFilters = {
+  dateFrom: string;
+  dateTo: string;
+  paymentMethod: "all" | PaymentMethod;
+  includeDeleted: boolean;
+  search: string;
+};
+
+type Filters = {
+  search: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+// ====== HELPER ======
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
 const SalonApp = () => {
   // ====== Estado ======
-  const [currentUser, setCurrentUser] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [services, setServices] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [showPin, setShowPin] = useState({});
-  const [notification, setNotification] = useState(null);
-  const [editingService, setEditingService] = useState(null);
-  const [filters, setFilters] = useState({ search: "", dateFrom: "", dateTo: "" });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [showPin, setShowPin] = useState<Record<string, boolean>>({});
+  const [notification, setNotification] = useState<Toast | null>(null);
+  const [editingService, setEditingService] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>({ search: "", dateFrom: "", dateTo: "" });
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
 
-  // ✅ NUEVO: Filtros para Principal (con método de pago + soft delete)
-  const [ownerFilters, setOwnerFilters] = useState({
+  const [ownerFilters, setOwnerFilters] = useState<OwnerFilters>({
     dateFrom: "",
     dateTo: "",
-    paymentMethod: "all", // "all" | "cash" | "transfer"
+    paymentMethod: "all",
     includeDeleted: false,
     search: "",
   });
 
   // ====== Helpers ======
-  const normalizeUser = (u) => {
+  const normalizeUser = (u: DocumentData & { id: string }): User => {
     const commissionPct =
       typeof u.commissionPct === "number"
         ? clamp(u.commissionPct, 0, 100)
@@ -88,15 +138,15 @@ const SalonApp = () => {
     };
   };
 
-  const getUserById = (id) => users.find((u) => u.id === id);
+  const getUserById = (id: string): User | undefined => users.find((u) => u.id === id);
 
-  const getCommissionPctForService = (s) => {
+  const getCommissionPctForService = (s: Service): number => {
     if (typeof s.commissionPct === "number") return clamp(s.commissionPct, 0, 100);
     const u = getUserById(s.userId);
     return clamp(u?.commissionPct ?? 0, 0, 100);
   };
 
-  const calcCommissionAmount = (s) => {
+  const calcCommissionAmount = (s: Service): number => {
     const pct = getCommissionPctForService(s);
     const cost = Number(s.cost) || 0;
     return (cost * pct) / 100;
@@ -193,7 +243,7 @@ const SalonApp = () => {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Service));
         setServices(data);
       },
       (error) => {
@@ -212,7 +262,7 @@ const SalonApp = () => {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Expense));
         setExpenses(data);
       },
       (error) => {
@@ -225,7 +275,7 @@ const SalonApp = () => {
   }, [initialized]);
 
   // ====== Notificaciones ======
-  const showNotification = (message, type = "success") => {
+  const showNotification = (message: string, type: Toast["type"] = "success") => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 2800);
   };
@@ -241,7 +291,7 @@ const SalonApp = () => {
   };
 
   // ====== CSV ======
-  const exportToCSV = (data, filename) => {
+  const exportToCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) {
       showNotification("No hay datos para exportar", "error");
       return;
@@ -260,14 +310,14 @@ const SalonApp = () => {
 
   // ====== Login ======
   const LoginScreen = () => {
-    const [pins, setPins] = useState({});
+    const [pins, setPins] = useState<Record<string, string>>({});
 
-    const handlePinChange = (userId, value) => {
+    const handlePinChange = (userId: string, value: string) => {
       const numericValue = value.replace(/\D/g, "").slice(0, 4);
       setPins({ ...pins, [userId]: numericValue });
     };
 
-    const handleLogin = (userId) => {
+    const handleLogin = (userId: string) => {
       const user = users.find((u) => u.id === userId);
       if (user && pins[userId] === user.pin) {
         setCurrentUser(user);
@@ -279,7 +329,7 @@ const SalonApp = () => {
       }
     };
 
-    const handleKeyPress = (e, userId) => {
+    const handleKeyPress = (e: React.KeyboardEvent, userId: string) => {
       if (e.key === "Enter" && (pins[userId] || "").length === 4) handleLogin(userId);
     };
 
@@ -388,10 +438,10 @@ const SalonApp = () => {
       client: "",
       service: "",
       cost: "",
-      paymentMethod: "cash", // ✅ NUEVO
+      paymentMethod: "cash" as PaymentMethod,
     });
 
-    const userServices = services.filter((s) => s.userId === currentUser.id && !s.deleted); // ✅ excluir eliminados
+    const userServices = services.filter((s) => s.userId === currentUser?.id && !s.deleted);
 
     const filteredServices = userServices.filter((s) => {
       const matchSearch =
@@ -415,19 +465,19 @@ const SalonApp = () => {
         return;
       }
 
-      const commissionPct = clamp(Number(currentUser.commissionPct || 0), 0, 100);
+      const commissionPct = clamp(Number(currentUser?.commissionPct || 0), 0, 100);
 
       try {
         await addDoc(collection(db, "services"), {
-          userId: currentUser.id,
-          userName: currentUser.name,
+          userId: currentUser?.id,
+          userName: currentUser?.name,
           date: newService.date,
           client: newService.client.trim(),
           service: newService.service.trim(),
           cost,
           commissionPct,
-          paymentMethod: newService.paymentMethod, // ✅ NUEVO
-          deleted: false, // ✅ NUEVO
+          paymentMethod: newService.paymentMethod,
+          deleted: false,
           timestamp: serverTimestamp(),
         });
 
@@ -445,7 +495,7 @@ const SalonApp = () => {
       }
     };
 
-    const updateService = async (id, updated) => {
+    const updateService = async (id: string, updated: Partial<Service>) => {
       try {
         await updateDoc(doc(db, "services", id), updated);
         setEditingService(null);
@@ -456,14 +506,13 @@ const SalonApp = () => {
       }
     };
 
-    // ✅ SOFT DELETE en lugar de borrar
-    const softDeleteService = async (id) => {
+    const softDeleteService = async (id: string) => {
       if (!window.confirm("¿Eliminar este servicio? (Se guardará como historial)")) return;
       try {
         await updateDoc(doc(db, "services", id), {
           deleted: true,
           deletedAt: serverTimestamp(),
-          deletedBy: currentUser.id,
+          deletedBy: currentUser?.id,
         });
         showNotification("Servicio eliminado (historial)");
       } catch (error) {
@@ -478,10 +527,10 @@ const SalonApp = () => {
 
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className={`bg-gradient-to-r ${currentUser.color} text-white p-6 shadow-lg`}>
+        <div className={`bg-gradient-to-r ${currentUser?.color} text-white p-6 shadow-lg`}>
           <div className="max-w-6xl mx-auto flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-bold">Hola, {currentUser.name}</h1>
+              <h1 className="text-2xl font-bold">Hola, {currentUser?.name}</h1>
               <p className="text-white/80">Registra tus servicios</p>
             </div>
             <button
@@ -534,10 +583,9 @@ const SalonApp = () => {
                 className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition"
               />
 
-              {/* ✅ NUEVO: Método de pago */}
               <select
                 value={newService.paymentMethod}
-                onChange={(e) => setNewService({ ...newService, paymentMethod: e.target.value })}
+                onChange={(e) => setNewService({ ...newService, paymentMethod: e.target.value as PaymentMethod })}
                 className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition"
               >
                 <option value="cash">Efectivo</option>
@@ -546,7 +594,7 @@ const SalonApp = () => {
 
               <button
                 onClick={addService}
-                className={`bg-gradient-to-r ${currentUser.color} text-white px-6 py-2 rounded-lg hover:shadow-lg transition font-semibold`}
+                className={`bg-gradient-to-r ${currentUser?.color} text-white px-6 py-2 rounded-lg hover:shadow-lg transition font-semibold`}
               >
                 Agregar
               </button>
@@ -568,7 +616,7 @@ const SalonApp = () => {
             </div>
             <div className="bg-gradient-to-br from-purple-400 to-purple-600 text-white rounded-xl shadow-lg p-6">
               <h3 className="text-sm font-semibold mb-2 opacity-90">Mi Perfil</h3>
-              <p className="text-2xl font-bold">{currentUser.name}</p>
+              <p className="text-2xl font-bold">{currentUser?.name}</p>
               <p className="text-purple-100 text-sm mt-1">Personal</p>
             </div>
           </div>
@@ -633,7 +681,7 @@ const SalonApp = () => {
                 <tbody>
                   {filteredServices.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         No hay servicios
                       </td>
                     </tr>
@@ -641,96 +689,101 @@ const SalonApp = () => {
                     filteredServices
                       .slice()
                       .reverse()
-                      .map((service) => (
-                        <tr key={service.id} className="border-b hover:bg-gray-50 transition">
-                          {editingService === service.id ? (
-                            <>
-                              <td className="px-6 py-4">
-                                <input
-                                  type="date"
-                                  defaultValue={service.date}
-                                  onChange={(e) => (service.date = e.target.value)}
-                                  className="px-2 py-1 border rounded"
-                                />
-                              </td>
-                              <td className="px-6 py-4">
-                                <input
-                                  type="text"
-                                  defaultValue={service.client}
-                                  onChange={(e) => (service.client = e.target.value)}
-                                  className="px-2 py-1 border rounded w-full"
-                                />
-                              </td>
-                              <td className="px-6 py-4">
-                                <input
-                                  type="text"
-                                  defaultValue={service.service}
-                                  onChange={(e) => (service.service = e.target.value)}
-                                  className="px-2 py-1 border rounded w-full"
-                                />
-                              </td>
-                              <td className="px-6 py-4">
-                                <select
-                                  defaultValue={service.paymentMethod || "cash"}
-                                  onChange={(e) => (service.paymentMethod = e.target.value)}
-                                  className="px-2 py-1 border rounded"
-                                >
-                                  <option value="cash">Efectivo</option>
-                                  <option value="transfer">Transferencia</option>
-                                </select>
-                              </td>
-                              <td className="px-6 py-4">
-                                <input
-                                  type="number"
-                                  defaultValue={service.cost}
-                                  onChange={(e) => (service.cost = parseFloat(e.target.value))}
-                                  className="px-2 py-1 border rounded w-24"
-                                />
-                              </td>
-                              <td className="px-6 py-4 flex gap-2">
-                                <button
-                                  onClick={() => updateService(service.id, { ...service })}
-                                  className="text-green-600 hover:text-green-800"
-                                >
-                                  <Save size={18} />
-                                </button>
-                                <button
-                                  onClick={() => setEditingService(null)}
-                                  className="text-gray-500 hover:text-gray-700"
-                                >
-                                  <X size={18} />
-                                </button>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="px-6 py-4 text-sm">{service.date}</td>
-                              <td className="px-6 py-4 text-sm font-medium">{service.client}</td>
-                              <td className="px-6 py-4 text-sm">{service.service}</td>
-                              <td className="px-6 py-4 text-sm">
-                                {service.paymentMethod === "transfer" ? "Transferencia" : "Efectivo"}
-                              </td>
-                              <td className="px-6 py-4 text-sm font-bold text-green-600">
-                                ${Number(service.cost).toFixed(2)}
-                              </td>
-                              <td className="px-6 py-4 flex gap-2">
-                                <button
-                                  onClick={() => setEditingService(service.id)}
-                                  className="text-blue-600 hover:text-blue-800 transition"
-                                >
-                                  <Edit2 size={18} />
-                                </button>
-                                <button
-                                  onClick={() => softDeleteService(service.id)}
-                                  className="text-red-600 hover:text-red-800 transition"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      ))
+                      .map((service) => {
+                        const isEditing = editingService === service.id;
+                        let editedService = { ...service };
+
+                        return (
+                          <tr key={service.id} className="border-b hover:bg-gray-50 transition">
+                            {isEditing ? (
+                              <>
+                                <td className="px-6 py-4">
+                                  <input
+                                    type="date"
+                                    defaultValue={service.date}
+                                    onChange={(e) => (editedService.date = e.target.value)}
+                                    className="px-2 py-1 border rounded"
+                                  />
+                                </td>
+                                <td className="px-6 py-4">
+                                  <input
+                                    type="text"
+                                    defaultValue={service.client}
+                                    onChange={(e) => (editedService.client = e.target.value)}
+                                    className="px-2 py-1 border rounded w-full"
+                                  />
+                                </td>
+                                <td className="px-6 py-4">
+                                  <input
+                                    type="text"
+                                    defaultValue={service.service}
+                                    onChange={(e) => (editedService.service = e.target.value)}
+                                    className="px-2 py-1 border rounded w-full"
+                                  />
+                                </td>
+                                <td className="px-6 py-4">
+                                  <select
+                                    defaultValue={service.paymentMethod || "cash"}
+                                    onChange={(e) => (editedService.paymentMethod = e.target.value as PaymentMethod)}
+                                    className="px-2 py-1 border rounded"
+                                  >
+                                    <option value="cash">Efectivo</option>
+                                    <option value="transfer">Transferencia</option>
+                                  </select>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <input
+                                    type="number"
+                                    defaultValue={service.cost}
+                                    onChange={(e) => (editedService.cost = parseFloat(e.target.value))}
+                                    className="px-2 py-1 border rounded w-24"
+                                  />
+                                </td>
+                                <td className="px-6 py-4 flex gap-2">
+                                  <button
+                                    onClick={() => updateService(service.id, editedService)}
+                                    className="text-green-600 hover:text-green-800"
+                                  >
+                                    <Save size={18} />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingService(null)}
+                                    className="text-gray-500 hover:text-gray-700"
+                                  >
+                                    <X size={18} />
+                                  </button>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-6 py-4 text-sm">{service.date}</td>
+                                <td className="px-6 py-4 text-sm font-medium">{service.client}</td>
+                                <td className="px-6 py-4 text-sm">{service.service}</td>
+                                <td className="px-6 py-4 text-sm">
+                                  {service.paymentMethod === "transfer" ? "Transferencia" : "Efectivo"}
+                                </td>
+                                <td className="px-6 py-4 text-sm font-bold text-green-600">
+                                  ${Number(service.cost).toFixed(2)}
+                                </td>
+                                <td className="px-6 py-4 flex gap-2">
+                                  <button
+                                    onClick={() => setEditingService(service.id)}
+                                    className="text-blue-600 hover:text-blue-800 transition"
+                                  >
+                                    <Edit2 size={18} />
+                                  </button>
+                                  <button
+                                    onClick={() => softDeleteService(service.id)}
+                                    className="text-red-600 hover:text-red-800 transition"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>
@@ -757,9 +810,8 @@ const SalonApp = () => {
     });
 
     const [showAddUser, setShowAddUser] = useState(false);
-    const [commissionDraft, setCommissionDraft] = useState({});
+    const [commissionDraft, setCommissionDraft] = useState<Record<string, string>>({});
 
-    // ✅ NUEVO: Filtrar servicios y gastos según ownerFilters
     const ownerServices = useMemo(() => {
       return services.filter((s) => {
         const matchDeleted = ownerFilters.includeDeleted ? true : !s.deleted;
@@ -795,7 +847,6 @@ const SalonApp = () => {
     const totalCommissions = ownerServices.reduce((sum, s) => sum + calcCommissionAmount(s), 0);
     const netProfit = totalIncome - totalExpenses - totalCommissions;
 
-    // ✅ NUEVO: Cierre de caja por método de pago
     const byPayment = useMemo(() => {
       const cash = ownerServices
         .filter((s) => s.paymentMethod === "cash")
@@ -838,7 +889,7 @@ const SalonApp = () => {
         await addDoc(collection(db, "expenses"), {
           ...newExpense,
           amount,
-          deleted: false, // ✅ NUEVO
+          deleted: false,
           timestamp: serverTimestamp(),
         });
 
@@ -890,14 +941,13 @@ const SalonApp = () => {
       }
     };
 
-    // ✅ SOFT DELETE de gasto
-    const softDeleteExpense = async (id) => {
+    const softDeleteExpense = async (id: string) => {
       if (!window.confirm("¿Eliminar este gasto? (Se guardará como historial)")) return;
       try {
         await updateDoc(doc(db, "expenses", id), {
           deleted: true,
           deletedAt: serverTimestamp(),
-          deletedBy: currentUser.id,
+          deletedBy: currentUser?.id,
         });
         showNotification("Gasto eliminado (historial)");
       } catch (error) {
@@ -906,7 +956,7 @@ const SalonApp = () => {
       }
     };
 
-    const deactivateUser = async (id) => {
+    const deactivateUser = async (id: string) => {
       const u = users.find((x) => x.id === id);
       if (!u) return;
 
@@ -929,7 +979,7 @@ const SalonApp = () => {
       }
     };
 
-    const saveCommission = async (userId) => {
+    const saveCommission = async (userId: string) => {
       const raw = commissionDraft[userId];
       const pct = clamp(parseFloat(raw) || 0, 0, 100);
 
@@ -967,7 +1017,6 @@ const SalonApp = () => {
         </div>
 
         <div className="max-w-7xl mx-auto p-6">
-          {/* ✅ NUEVO: Filtros Principal */}
           <div className="bg-white rounded-xl shadow-md p-4 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               <input
@@ -986,7 +1035,7 @@ const SalonApp = () => {
               />
               <select
                 value={ownerFilters.paymentMethod}
-                onChange={(e) => setOwnerFilters({ ...ownerFilters, paymentMethod: e.target.value })}
+                onChange={(e) => setOwnerFilters({ ...ownerFilters, paymentMethod: e.target.value as OwnerFilters["paymentMethod"] })}
                 className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
               >
                 <option value="all">Todos los pagos</option>
@@ -1030,7 +1079,6 @@ const SalonApp = () => {
             </div>
           </div>
 
-          {/* ✅ KPIs con cierre de caja */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
             <div className="bg-gradient-to-br from-green-400 to-green-600 text-white rounded-xl shadow-lg p-6">
               <div className="flex items-center justify-between">
@@ -1080,7 +1128,6 @@ const SalonApp = () => {
               </div>
             </div>
 
-            {/* ✅ NUEVO: Cierre de caja */}
             <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl shadow-lg p-6">
               <div className="flex items-center justify-between mb-3">
                 <Wallet size={32} className="opacity-80" />
@@ -1400,7 +1447,7 @@ const SalonApp = () => {
                 <tbody>
                   {ownerServices.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                         No hay servicios en este rango
                       </td>
                     </tr>
