@@ -20,6 +20,8 @@ import {
   Percent,
   Wallet,
   CreditCard,
+  UserX,
+  UserCheck,
 } from "lucide-react";
 
 import {
@@ -1145,6 +1147,15 @@ const SalonApp = () => {
         showNotification("Error al desactivar", "error");
       }
     };
+    const reactivateUser = async (userId: string) => {
+      try {
+        const userRef = doc(db, "users", userId);
+        await updateDoc(userRef, { active: true });
+      } catch (error) {
+        console.error("Error reactivating user:", error);
+        alert("Error al reactivar usuario");
+      }
+    };
 
     const saveCommission = async (userId: string) => {
       const raw = commissionDraft[userId];
@@ -1538,6 +1549,56 @@ const SalonApp = () => {
                       Cancelar
                     </button>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Usuarios Inactivos */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 border-2 border-gray-200 mb-6">
+              <div className="flex items-center gap-3 mb-6">
+                <UserX className="w-7 h-7 text-gray-500" />
+                <h2 className="text-2xl font-bold text-gray-800">
+                  Usuarios Inactivos
+                </h2>
+              </div>
+
+              {users.filter((u) => u.active === false).length === 0 ? (
+                <p className="text-gray-500 text-center py-4">
+                  No hay usuarios inactivos
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {users
+                    .filter((u) => u.active === false)
+                    .map((user) => (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border-2 border-gray-200"
+                      >
+                        <div className="flex items-center gap-3">
+                          <UserX className="w-5 h-5 text-gray-400" />
+                          <div>
+                            <p className="font-bold text-gray-700">
+                              {user.name}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Comisión: {user.commissionPct}%
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`¿Reactivar a ${user.name}?`)) {
+                              reactivateUser(user.id);
+                            }
+                          }}
+                          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all flex items-center gap-2"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          Reactivar
+                        </button>
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
