@@ -35,6 +35,7 @@ import {
 } from "firebase/firestore";
 
 import type { DocumentData } from "firebase/firestore";
+import { db } from "./firebase";
 
 
 // ====== TIPOS ======
