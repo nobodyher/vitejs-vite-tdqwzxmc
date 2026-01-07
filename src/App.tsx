@@ -820,7 +820,7 @@ const SalonApp = () => {
                                     onChange={(e) =>
                                       (editedService.client = e.target.value)
                                     }
-                                    className="px-2 py-1 border rounded w-full"
+                                    className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none w-full"
                                   />
                                 </td>
                                 <td className="px-6 py-4">
@@ -830,7 +830,7 @@ const SalonApp = () => {
                                     onChange={(e) =>
                                       (editedService.service = e.target.value)
                                     }
-                                    className="px-2 py-1 border rounded w-full"
+                                    className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none w-full"
                                   />
                                 </td>
                                 <td className="px-6 py-4">
