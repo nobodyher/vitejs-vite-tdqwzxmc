@@ -1024,20 +1024,20 @@ const SalonApp = () => {
                 type="date"
                 value={ownerFilters.dateFrom}
                 onChange={(e) => setOwnerFilters({ ...ownerFilters, dateFrom: e.target.value })}
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                 placeholder="Desde"
               />
               <input
                 type="date"
                 value={ownerFilters.dateTo}
                 onChange={(e) => setOwnerFilters({ ...ownerFilters, dateTo: e.target.value })}
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                 placeholder="Hasta"
               />
               <select
                 value={ownerFilters.paymentMethod}
                 onChange={(e) => setOwnerFilters({ ...ownerFilters, paymentMethod: e.target.value as OwnerFilters["paymentMethod"] })}
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
               >
                 <option value="all">Todos los pagos</option>
                 <option value="cash">Efectivo</option>
@@ -1050,7 +1050,7 @@ const SalonApp = () => {
                   placeholder="Buscar (cliente, servicio, personal, gasto)..."
                   value={ownerFilters.search}
                   onChange={(e) => setOwnerFilters({ ...ownerFilters, search: e.target.value })}
-                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                 />
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -1197,7 +1197,7 @@ const SalonApp = () => {
                                       [staff.id]: e.target.value,
                                     })
                                   }
-                                  className="w-20 px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none text-center font-bold"
+                                  className="w-20 px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-center font-bold text-gray-900 bg-white"
                                 />
                                 <span className="text-gray-600 font-semibold">%</span>
                               </div>
@@ -1257,7 +1257,7 @@ const SalonApp = () => {
                     placeholder="Nombre completo"
                     value={newUser.name}
                     onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                   />
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1272,7 +1272,7 @@ const SalonApp = () => {
                         })
                       }
                       maxLength={4}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                     />
                     <div className="flex items-center gap-2">
                       <input
@@ -1282,7 +1282,7 @@ const SalonApp = () => {
                         placeholder="Comisión %"
                         value={newUser.commissionPct}
                         onChange={(e) => setNewUser({ ...newUser, commissionPct: e.target.value })}
-                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                       />
                       <span className="font-bold text-gray-600">%</span>
                     </div>
@@ -1317,12 +1317,12 @@ const SalonApp = () => {
                   type="date"
                   value={newExpense.date}
                   onChange={(e) => setNewExpense({ ...newExpense, date: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none"
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
                 />
                 <select
                   value={newExpense.category}
                   onChange={(e) => setNewExpense({ ...newExpense, category: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none"
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
                 >
                   <option value="reposicion">Reposición</option>
                   <option value="servicios">Servicios (luz, agua, etc.)</option>
@@ -1336,7 +1336,7 @@ const SalonApp = () => {
                   placeholder="Descripción del gasto"
                   value={newExpense.description}
                   onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none"
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
                 />
                 <input
                   type="number"
@@ -1344,7 +1344,7 @@ const SalonApp = () => {
                   placeholder="Monto $"
                   value={newExpense.amount}
                   onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none"
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
                 />
                 <button
                   onClick={addExpense}
