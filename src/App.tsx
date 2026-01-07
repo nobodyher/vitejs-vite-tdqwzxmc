@@ -384,7 +384,7 @@ const SalonApp = () => {
               Blossom Nails
             </h1>
             <p className="text-gray-500 text-lg font-medium">
-              Sistema de Gestión Profesional
+              Sistema de Gestión
             </p>
           </div>
 
