@@ -32,10 +32,10 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
-  DocumentData,
 } from "firebase/firestore";
 
-import { db } from "./firebase";
+import type { DocumentData } from "firebase/firestore";
+
 
 // ====== TIPOS ======
 type Role = "owner" | "staff";
