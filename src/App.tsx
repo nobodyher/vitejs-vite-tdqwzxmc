@@ -810,7 +810,7 @@ const SalonApp = () => {
                                     onChange={(e) =>
                                       (editedService.date = e.target.value)
                                     }
-                                    className="px-2 py-1 border rounded"
+                                    className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
                                   />
                                 </td>
                                 <td className="px-6 py-4">
@@ -842,7 +842,7 @@ const SalonApp = () => {
                                       (editedService.paymentMethod = e.target
                                         .value as PaymentMethod)
                                     }
-                                    className="px-2 py-1 border rounded"
+                                    className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
                                   >
                                     <option value="cash">Efectivo</option>
                                     <option value="transfer">
