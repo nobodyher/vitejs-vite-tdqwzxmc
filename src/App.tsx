@@ -613,7 +613,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, date: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
               />
               <input
                 type="text"
@@ -622,7 +622,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, client: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
               />
               <input
                 type="text"
@@ -631,7 +631,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, service: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
               />
               <input
                 type="number"
@@ -641,7 +641,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, cost: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
               />
 
               <select
@@ -652,7 +652,7 @@ const SalonApp = () => {
                     paymentMethod: e.target.value as PaymentMethod,
                   })
                 }
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none transition"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
               >
                 <option value="cash">Efectivo</option>
                 <option value="transfer">Transferencia</option>
@@ -712,7 +712,7 @@ const SalonApp = () => {
                   onChange={(e) =>
                     setFilters({ ...filters, search: e.target.value })
                   }
-                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none"
+                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none text-gray-900 bg-white"
                 />
               </div>
               <input
@@ -721,7 +721,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setFilters({ ...filters, dateFrom: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none text-gray-900 bg-white"
               />
               <input
                 type="date"
@@ -729,7 +729,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setFilters({ ...filters, dateTo: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none text-gray-900 bg-white"
               />
               <button
                 onClick={() =>
