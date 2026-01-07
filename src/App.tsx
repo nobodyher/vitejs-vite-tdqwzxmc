@@ -613,7 +613,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, date: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
+                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
               />
               <input
                 type="text"
@@ -622,7 +622,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, client: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
+                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
               />
               <input
                 type="text"
@@ -631,7 +631,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, service: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
+                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
               />
               <input
                 type="number"
@@ -641,7 +641,7 @@ const SalonApp = () => {
                 onChange={(e) =>
                   setNewService({ ...newService, cost: e.target.value })
                 }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
+                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
               />
 
               <select
@@ -652,7 +652,7 @@ const SalonApp = () => {
                     paymentMethod: e.target.value as PaymentMethod,
                   })
                 }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none transition text-gray-900 bg-white"
+                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
               >
                 <option value="cash">Efectivo</option>
                 <option value="transfer">Transferencia</option>
