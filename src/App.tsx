@@ -156,7 +156,7 @@ const SalonApp = () => {
   //const [serviceRecipes, setServiceRecipes] = useState<ServiceRecipe[]>([]);
   //const [catalogExtras, setCatalogExtras] = useState<CatalogExtra[]>([]);
   //const [catalogTab, setCatalogTab] = useState<
-  "services" | "consumables" | ("extras" > "services");
+  // "services" | "consumables" | ("extras" > "services");
 
   const [ownerFilters, setOwnerFilters] = useState<OwnerFilters>({
     dateFrom: "",
