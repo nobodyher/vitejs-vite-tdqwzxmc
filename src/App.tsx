@@ -93,6 +93,44 @@ type Filters = {
   dateTo: string;
 };
 
+// ====== TIPOS CATÁLOGO ======
+type CatalogService = {
+  id: string;
+  name: string;
+  category: "manicura" | "pedicura";
+  basePrice: number;
+  active: boolean;
+};
+
+type Consumable = {
+  id: string;
+  name: string;
+  unit: string; // "par", "unidad", "gramo", "metro"
+  unitCost: number;
+  stockQty: number;
+  minStockAlert: number;
+  active: boolean;
+};
+
+type RecipeItem = {
+  consumableId: string;
+  qty: number;
+};
+
+type ServiceRecipe = {
+  id: string;
+  serviceId: string;
+  items: RecipeItem[];
+};
+
+type CatalogExtra = {
+  id: string;
+  name: string;
+  priceSuggested: number;
+  appliesToCategories: string[];
+  active: boolean;
+};
+
 // ====== HELPER ======
 const clamp = (n: number, min: number, max: number) =>
   Math.min(max, Math.max(min, n));
@@ -113,6 +151,13 @@ const SalonApp = () => {
   });
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
+  const [consumables, setConsumables] = useState<Consumable[]>([]);
+  const [serviceRecipes, setServiceRecipes] = useState<ServiceRecipe[]>([]);
+  const [catalogExtras, setCatalogExtras] = useState<CatalogExtra[]>([]);
+  const [catalogTab, setCatalogTab] = useState<
+    "services" | "consumables" | "extras"
+  >("services");
 
   const [ownerFilters, setOwnerFilters] = useState<OwnerFilters>({
     dateFrom: "",
@@ -223,9 +268,169 @@ const SalonApp = () => {
     }
   };
 
+  // ====== Inicializar catálogo (solo una vez) ======
+  const initializeCatalog = async () => {
+    try {
+      await runTransaction(db, async (tx) => {
+        const metaRef = doc(db, "meta", "catalog");
+        const metaSnap = await tx.get(metaRef);
+
+        if (metaSnap.exists() && metaSnap.data()?.seeded) return;
+
+        // Servicios base
+        const defaultServices = [
+          {
+            name: "Manicura en gel 1 solo color",
+            category: "manicura",
+            basePrice: 12,
+          },
+          { name: "Manicura con diseño", category: "manicura", basePrice: 15 },
+          {
+            name: "Uñas acrílicas (base)",
+            category: "manicura",
+            basePrice: 25,
+          },
+          { name: "Uñas poligel (base)", category: "manicura", basePrice: 25 },
+          { name: "Pedicure 1 tono", category: "pedicura", basePrice: 15 },
+          { name: "Pedicure francesa", category: "pedicura", basePrice: 18 },
+          { name: "Pedicura limpieza", category: "pedicura", basePrice: 10 },
+          { name: "Manicura limpieza", category: "manicura", basePrice: 7 },
+          {
+            name: "Rubber uñas cortas 1 tono",
+            category: "manicura",
+            basePrice: 20,
+          },
+          {
+            name: "Rubber uñas largas 1 tono",
+            category: "manicura",
+            basePrice: 25,
+          },
+          { name: "Gel builder 1 tono", category: "manicura", basePrice: 25 },
+          {
+            name: "Gel builder alargamiento",
+            category: "manicura",
+            basePrice: 30,
+          },
+          {
+            name: "Pedicure spa velo terapia 1 tono",
+            category: "pedicura",
+            basePrice: 30,
+          },
+          { name: "Jelly spa 1 tono", category: "pedicura", basePrice: 40 },
+        ];
+
+        defaultServices.forEach((s) => {
+          const newRef = doc(collection(db, "catalog_services"));
+          tx.set(newRef, { ...s, active: true, createdAt: serverTimestamp() });
+        });
+
+        // Consumibles
+        const defaultConsumables = [
+          {
+            name: "Guantes (par)",
+            unit: "par",
+            unitCost: 0.13,
+            stockQty: 200,
+            minStockAlert: 50,
+          },
+          {
+            name: "Mascarillas",
+            unit: "unidad",
+            unitCost: 0.02,
+            stockQty: 500,
+            minStockAlert: 100,
+          },
+          {
+            name: "Palillo naranja",
+            unit: "unidad",
+            unitCost: 0.01,
+            stockQty: 500,
+            minStockAlert: 100,
+          },
+          {
+            name: "Bastoncillos",
+            unit: "unidad",
+            unitCost: 0.01,
+            stockQty: 500,
+            minStockAlert: 100,
+          },
+          {
+            name: "Wipes",
+            unit: "unidad",
+            unitCost: 0.01,
+            stockQty: 2000,
+            minStockAlert: 200,
+          },
+          {
+            name: "Toalla desechable",
+            unit: "unidad",
+            unitCost: 0.04,
+            stockQty: 300,
+            minStockAlert: 50,
+          },
+          {
+            name: "Gorro",
+            unit: "unidad",
+            unitCost: 0.03,
+            stockQty: 500,
+            minStockAlert: 100,
+          },
+          {
+            name: "Campo quirúrgico",
+            unit: "unidad",
+            unitCost: 0.06,
+            stockQty: 500,
+            minStockAlert: 100,
+          },
+          {
+            name: "Moldes esculpir",
+            unit: "unidad",
+            unitCost: 0.02,
+            stockQty: 1500,
+            minStockAlert: 200,
+          },
+          {
+            name: "Algodón",
+            unit: "gramo",
+            unitCost: 0.017,
+            stockQty: 2500,
+            minStockAlert: 500,
+          },
+          {
+            name: "Papel film",
+            unit: "metro",
+            unitCost: 0.121,
+            stockQty: 60,
+            minStockAlert: 10,
+          },
+        ];
+
+        defaultConsumables.forEach((c) => {
+          const newRef = doc(collection(db, "consumables"));
+          tx.set(newRef, { ...c, active: true, createdAt: serverTimestamp() });
+        });
+
+        tx.set(
+          metaRef,
+          { seeded: true, seededAt: serverTimestamp() },
+          { merge: true }
+        );
+      });
+
+      showNotification("Catálogo inicializado");
+    } catch (error) {
+      console.error("Error inicializando catálogo:", error);
+      showNotification("Error al inicializar catálogo", "error");
+    }
+  };
+
   // ====== Cargar datos en tiempo real ======
   useEffect(() => {
     initializeDefaultUsers();
+  }, []);
+
+  useEffect(() => {
+    initializeCatalog();
   }, []);
 
   useEffect(() => {
@@ -290,6 +495,57 @@ const SalonApp = () => {
       }
     );
 
+    return () => unsub();
+  }, [initialized]);
+
+  // Cargar catálogo de servicios
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(collection(db, "catalog_services"), orderBy("name", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as CatalogService)
+      );
+      setCatalogServices(data);
+    });
+    return () => unsub();
+  }, [initialized]);
+
+  // Cargar consumibles
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(collection(db, "consumables"), orderBy("name", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as Consumable)
+      );
+      setConsumables(data);
+    });
+    return () => unsub();
+  }, [initialized]);
+
+  // Cargar recetas
+  useEffect(() => {
+    if (!initialized) return;
+    const unsub = onSnapshot(collection(db, "service_recipes"), (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as ServiceRecipe)
+      );
+      setServiceRecipes(data);
+    });
+    return () => unsub();
+  }, [initialized]);
+
+  // Cargar extras
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(collection(db, "catalog_extras"), orderBy("name", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as CatalogExtra)
+      );
+      setCatalogExtras(data);
+    });
     return () => unsub();
   }, [initialized]);
 
@@ -1147,6 +1403,7 @@ const SalonApp = () => {
         showNotification("Error al desactivar", "error");
       }
     };
+
     const reactivateUser = async (userId: string) => {
       try {
         const userRef = doc(db, "users", userId);
