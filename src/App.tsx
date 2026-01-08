@@ -22,6 +22,12 @@ import {
   CreditCard,
   UserX,
   UserCheck,
+  Settings,
+  Package,
+  ShoppingCart,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -34,6 +40,7 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
+  deleteDoc,
 } from "firebase/firestore";
 
 import type { DocumentData } from "firebase/firestore";
@@ -105,7 +112,7 @@ type CatalogService = {
 type Consumable = {
   id: string;
   name: string;
-  unit: string; // "par", "unidad", "gramo", "metro"
+  unit: string;
   unitCost: number;
   stockQty: number;
   minStockAlert: number;
@@ -151,12 +158,13 @@ const SalonApp = () => {
   });
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  //const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
-  //const [consumables, setConsumables] = useState<Consumable[]>([]);
-  //const [serviceRecipes, setServiceRecipes] = useState<ServiceRecipe[]>([]);
-  //const [catalogExtras, setCatalogExtras] = useState<CatalogExtra[]>([]);
-  //const [catalogTab, setCatalogTab] = useState<
-  // "services" | "consumables" | ("extras" > "services");
+  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
+  const [consumables, setConsumables] = useState<Consumable[]>([]);
+  const [serviceRecipes, setServiceRecipes] = useState<ServiceRecipe[]>([]);
+  const [catalogExtras, setCatalogExtras] = useState<CatalogExtra[]>([]);
+  const [catalogTab, setCatalogTab] = useState<
+    "services" | "consumables" | "extras"
+  >("services");
 
   const [ownerFilters, setOwnerFilters] = useState<OwnerFilters>({
     dateFrom: "",
@@ -165,6 +173,8 @@ const SalonApp = () => {
     includeDeleted: false,
     search: "",
   });
+
+  const [ownerTab, setOwnerTab] = useState<"dashboard" | "config">("dashboard");
 
   // ====== Helpers ======
   const normalizeUser = (u: DocumentData & { id: string }): User => {
@@ -497,56 +507,56 @@ const SalonApp = () => {
     return () => unsub();
   }, [initialized]);
 
-  // // Cargar catálogo de servicios
-  // useEffect(() => {
-  //   if (!initialized) return;
-  //   const q = query(collection(db, "catalog_services"), orderBy("name", "asc"));
-  //   const unsub = onSnapshot(q, (snap) => {
-  //     const data = snap.docs.map(
-  //       (d) => ({ id: d.id, ...d.data() } as CatalogService)
-  //     );
-  //     setCatalogServices(data);
-  //   });
-  //   return () => unsub();
-  // }, [initialized]);
+  // Cargar catálogo de servicios
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(collection(db, "catalog_services"), orderBy("name", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as CatalogService)
+      );
+      setCatalogServices(data);
+    });
+    return () => unsub();
+  }, [initialized]);
 
-  // // Cargar consumibles
-  // useEffect(() => {
-  //   if (!initialized) return;
-  //   const q = query(collection(db, "consumables"), orderBy("name", "asc"));
-  //   const unsub = onSnapshot(q, (snap) => {
-  //     const data = snap.docs.map(
-  //       (d) => ({ id: d.id, ...d.data() } as Consumable)
-  //     );
-  //     setConsumables(data);
-  //   });
-  //   return () => unsub();
-  // }, [initialized]);
+  // Cargar consumibles
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(collection(db, "consumables"), orderBy("name", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as Consumable)
+      );
+      setConsumables(data);
+    });
+    return () => unsub();
+  }, [initialized]);
 
-  // // Cargar recetas
-  // useEffect(() => {
-  //   if (!initialized) return;
-  //   const unsub = onSnapshot(collection(db, "service_recipes"), (snap) => {
-  //     const data = snap.docs.map(
-  //       (d) => ({ id: d.id, ...d.data() } as ServiceRecipe)
-  //     );
-  //     setServiceRecipes(data);
-  //   });
-  //   return () => unsub();
-  // }, [initialized]);
+  // Cargar recetas
+  useEffect(() => {
+    if (!initialized) return;
+    const unsub = onSnapshot(collection(db, "service_recipes"), (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as ServiceRecipe)
+      );
+      setServiceRecipes(data);
+    });
+    return () => unsub();
+  }, [initialized]);
 
-  //   // Cargar extras
-  //   useEffect(() => {
-  //     if (!initialized) return;
-  //     const q = query(collection(db, "catalog_extras"), orderBy("name", "asc"));
-  //     const unsub = onSnapshot(q, (snap) => {
-  //       const data = snap.docs.map(
-  //         (d) => ({ id: d.id, ...d.data() } as CatalogExtra)
-  //       );
-  //       setCatalogExtras(data);
-  //     });
-  //     return () => unsub();
-  //   }, [initialized]);
+  // Cargar extras
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(collection(db, "catalog_extras"), orderBy("name", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as CatalogExtra)
+      );
+      setCatalogExtras(data);
+    });
+    return () => unsub();
+  }, [initialized]);
 
   // ====== Notificaciones ======
   const showNotification = (
@@ -736,7 +746,10 @@ const SalonApp = () => {
       service: "",
       cost: "",
       paymentMethod: "cash" as PaymentMethod,
+      catalogServiceId: "",
     });
+
+    const [showCatalogSelector, setShowCatalogSelector] = useState(false);
 
     const userServices = services.filter(
       (s) => s.userId === currentUser?.id && !s.deleted
@@ -751,6 +764,18 @@ const SalonApp = () => {
       const matchDateTo = !filters.dateTo || s.date <= filters.dateTo;
       return matchSearch && matchDateFrom && matchDateTo;
     });
+
+    const activeServices = catalogServices.filter((s) => s.active);
+
+    const selectCatalogService = (cs: CatalogService) => {
+      setNewService({
+        ...newService,
+        service: cs.name,
+        cost: String(cs.basePrice),
+        catalogServiceId: cs.id,
+      });
+      setShowCatalogSelector(false);
+    };
 
     const addService = async () => {
       if (!newService.client || !newService.service || !newService.cost) {
@@ -790,6 +815,7 @@ const SalonApp = () => {
           service: "",
           cost: "",
           paymentMethod: "cash",
+          catalogServiceId: "",
         });
         showNotification("Servicio agregado");
       } catch (error) {
@@ -879,15 +905,26 @@ const SalonApp = () => {
                 }
                 className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
               />
-              <input
-                type="text"
-                placeholder="Servicio realizado"
-                value={newService.service}
-                onChange={(e) =>
-                  setNewService({ ...newService, service: e.target.value })
-                }
-                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
-              />
+
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Servicio realizado"
+                  value={newService.service}
+                  onChange={(e) =>
+                    setNewService({ ...newService, service: e.target.value })
+                  }
+                  className="w-full px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
+                />
+                <button
+                  onClick={() => setShowCatalogSelector(!showCatalogSelector)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-pink-500 hover:text-pink-700"
+                  title="Seleccionar del catálogo"
+                >
+                  <Package size={18} />
+                </button>
+              </div>
+
               <input
                 type="number"
                 step="0.01"
@@ -920,6 +957,28 @@ const SalonApp = () => {
                 Agregar
               </button>
             </div>
+
+            {showCatalogSelector && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200 max-h-60 overflow-y-auto">
+                <p className="text-sm font-bold text-gray-700 mb-3">
+                  Selecciona un servicio del catálogo:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {activeServices.map((cs) => (
+                    <button
+                      key={cs.id}
+                      onClick={() => selectCatalogService(cs)}
+                      className="text-left p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-pink-500 hover:shadow-md transition"
+                    >
+                      <p className="font-semibold text-gray-800">{cs.name}</p>
+                      <p className="text-sm text-gray-500">
+                        {cs.category} - ${cs.basePrice}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -1186,6 +1245,505 @@ const SalonApp = () => {
     );
   };
 
+  // ====== Owner Config Tab ======
+  const OwnerConfigTab = () => {
+    const [newCatalogService, setNewCatalogService] = useState({
+      name: "",
+      category: "manicura" as "manicura" | "pedicura",
+      basePrice: "",
+    });
+
+    const [newConsumable, setNewConsumable] = useState({
+      name: "",
+      unit: "",
+      unitCost: "",
+      stockQty: "",
+      minStockAlert: "",
+    });
+
+    const addCatalogService = async () => {
+      if (!newCatalogService.name || !newCatalogService.basePrice) {
+        showNotification("Completa todos los campos", "error");
+        return;
+      }
+
+      const basePrice = parseFloat(newCatalogService.basePrice);
+      if (!Number.isFinite(basePrice) || basePrice <= 0) {
+        showNotification("Precio inválido", "error");
+        return;
+      }
+
+      try {
+        await addDoc(collection(db, "catalog_services"), {
+          name: newCatalogService.name.trim(),
+          category: newCatalogService.category,
+          basePrice,
+          active: true,
+          createdAt: serverTimestamp(),
+        });
+
+        setNewCatalogService({ name: "", category: "manicura", basePrice: "" });
+        showNotification("Servicio agregado al catálogo");
+      } catch (error) {
+        console.error("Error agregando servicio:", error);
+        showNotification("Error al agregar", "error");
+      }
+    };
+
+    const toggleCatalogService = async (id: string, active: boolean) => {
+      try {
+        await updateDoc(doc(db, "catalog_services", id), { active: !active });
+        showNotification(active ? "Servicio desactivado" : "Servicio activado");
+      } catch (error) {
+        console.error("Error actualizando servicio:", error);
+        showNotification("Error al actualizar", "error");
+      }
+    };
+
+    const deleteCatalogService = async (id: string) => {
+      if (!window.confirm("¿Eliminar este servicio del catálogo?")) return;
+      try {
+        await deleteDoc(doc(db, "catalog_services", id));
+        showNotification("Servicio eliminado");
+      } catch (error) {
+        console.error("Error eliminando servicio:", error);
+        showNotification("Error al eliminar", "error");
+      }
+    };
+
+    const addConsumable = async () => {
+      if (
+        !newConsumable.name ||
+        !newConsumable.unit ||
+        !newConsumable.unitCost ||
+        !newConsumable.stockQty ||
+        !newConsumable.minStockAlert
+      ) {
+        showNotification("Completa todos los campos", "error");
+        return;
+      }
+
+      const unitCost = parseFloat(newConsumable.unitCost);
+      const stockQty = parseFloat(newConsumable.stockQty);
+      const minStockAlert = parseFloat(newConsumable.minStockAlert);
+
+      if (
+        !Number.isFinite(unitCost) ||
+        !Number.isFinite(stockQty) ||
+        !Number.isFinite(minStockAlert)
+      ) {
+        showNotification("Valores numéricos inválidos", "error");
+        return;
+      }
+
+      try {
+        await addDoc(collection(db, "consumables"), {
+          name: newConsumable.name.trim(),
+          unit: newConsumable.unit.trim(),
+          unitCost,
+          stockQty,
+          minStockAlert,
+          active: true,
+          createdAt: serverTimestamp(),
+        });
+
+        setNewConsumable({
+          name: "",
+          unit: "",
+          unitCost: "",
+          stockQty: "",
+          minStockAlert: "",
+        });
+        showNotification("Consumible agregado");
+      } catch (error) {
+        console.error("Error agregando consumible:", error);
+        showNotification("Error al agregar", "error");
+      }
+    };
+
+    const updateConsumableStock = async (
+      id: string,
+      newStock: number,
+      operation: "add" | "subtract"
+    ) => {
+      const consumable = consumables.find((c) => c.id === id);
+      if (!consumable) return;
+
+      const updatedStock =
+        operation === "add"
+          ? consumable.stockQty + newStock
+          : consumable.stockQty - newStock;
+
+      if (updatedStock < 0) {
+        showNotification("Stock no puede ser negativo", "error");
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, "consumables", id), {
+          stockQty: updatedStock,
+        });
+        showNotification("Stock actualizado");
+      } catch (error) {
+        console.error("Error actualizando stock:", error);
+        showNotification("Error al actualizar", "error");
+      }
+    };
+
+    const deleteConsumable = async (id: string) => {
+      if (!window.confirm("¿Eliminar este consumible?")) return;
+      try {
+        await deleteDoc(doc(db, "consumables", id));
+        showNotification("Consumible eliminado");
+      } catch (error) {
+        console.error("Error eliminando consumible:", error);
+        showNotification("Error al eliminar", "error");
+      }
+    };
+
+    const lowStockConsumables = consumables.filter(
+      (c) => c.active && c.stockQty <= c.minStockAlert
+    );
+
+    return (
+      <div className="space-y-6">
+        {lowStockConsumables.length > 0 && (
+          <div className="bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300 rounded-xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="text-orange-600" size={32} />
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">
+                  ⚠️ Alertas de Stock Bajo
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {lowStockConsumables.length} consumible(s) necesitan
+                  reposición
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {lowStockConsumables.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-white rounded-lg p-4 border-2 border-orange-200"
+                >
+                  <p className="font-bold text-gray-800">{c.name}</p>
+                  <p className="text-sm text-gray-600">
+                    Stock actual:{" "}
+                    <span className="font-bold">{c.stockQty}</span> {c.unit}{" "}
+                    (mínimo: {c.minStockAlert})
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-4 border-b-2 border-gray-200 pb-2">
+          <button
+            onClick={() => setCatalogTab("services")}
+            className={`px-6 py-3 rounded-t-lg font-semibold transition ${
+              catalogTab === "services"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            Servicios
+          </button>
+          <button
+            onClick={() => setCatalogTab("consumables")}
+            className={`px-6 py-3 rounded-t-lg font-semibold transition ${
+              catalogTab === "consumables"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            Consumibles
+          </button>
+          <button
+            onClick={() => setCatalogTab("extras")}
+            className={`px-6 py-3 rounded-t-lg font-semibold transition ${
+              catalogTab === "extras"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            Extras
+          </button>
+        </div>
+
+        {catalogTab === "services" && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <ShoppingCart size={24} className="text-purple-500" />
+              Catálogo de Servicios
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-purple-50 rounded-lg">
+              <input
+                type="text"
+                placeholder="Nombre del servicio"
+                value={newCatalogService.name}
+                onChange={(e) =>
+                  setNewCatalogService({
+                    ...newCatalogService,
+                    name: e.target.value,
+                  })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              />
+              <select
+                value={newCatalogService.category}
+                onChange={(e) =>
+                  setNewCatalogService({
+                    ...newCatalogService,
+                    category: e.target.value as "manicura" | "pedicura",
+                  })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              >
+                <option value="manicura">Manicura</option>
+                <option value="pedicura">Pedicura</option>
+              </select>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Precio base $"
+                value={newCatalogService.basePrice}
+                onChange={(e) =>
+                  setNewCatalogService({
+                    ...newCatalogService,
+                    basePrice: e.target.value,
+                  })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              />
+              <button
+                onClick={addCatalogService}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-lg hover:shadow-lg transition font-semibold"
+              >
+                Agregar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {catalogServices.map((cs) => (
+                <div
+                  key={cs.id}
+                  className={`p-4 rounded-lg border-2 ${
+                    cs.active
+                      ? "bg-white border-purple-200"
+                      : "bg-gray-100 border-gray-300 opacity-60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-gray-800">{cs.name}</p>
+                      <p className="text-sm text-gray-600">
+                        {cs.category} - ${cs.basePrice}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleCatalogService(cs.id, cs.active)}
+                        className={`p-2 rounded-lg transition ${
+                          cs.active
+                            ? "bg-green-100 text-green-700 hover:bg-green-200"
+                            : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                        }`}
+                        title={cs.active ? "Desactivar" : "Activar"}
+                      >
+                        {cs.active ? (
+                          <CheckCircle size={18} />
+                        ) : (
+                          <XCircle size={18} />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => deleteCatalogService(cs.id)}
+                        className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {catalogTab === "consumables" && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Package size={24} className="text-purple-500" />
+              Inventario de Consumibles
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6 p-4 bg-purple-50 rounded-lg">
+              <input
+                type="text"
+                placeholder="Nombre"
+                value={newConsumable.name}
+                onChange={(e) =>
+                  setNewConsumable({ ...newConsumable, name: e.target.value })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              />
+              <input
+                type="text"
+                placeholder="Unidad"
+                value={newConsumable.unit}
+                onChange={(e) =>
+                  setNewConsumable({ ...newConsumable, unit: e.target.value })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              />
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Costo/unidad"
+                value={newConsumable.unitCost}
+                onChange={(e) =>
+                  setNewConsumable({
+                    ...newConsumable,
+                    unitCost: e.target.value,
+                  })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              />
+              <input
+                type="number"
+                placeholder="Stock inicial"
+                value={newConsumable.stockQty}
+                onChange={(e) =>
+                  setNewConsumable({
+                    ...newConsumable,
+                    stockQty: e.target.value,
+                  })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              />
+              <input
+                type="number"
+                placeholder="Alerta mínima"
+                value={newConsumable.minStockAlert}
+                onChange={(e) =>
+                  setNewConsumable({
+                    ...newConsumable,
+                    minStockAlert: e.target.value,
+                  })
+                }
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+              />
+              <button
+                onClick={addConsumable}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-lg hover:shadow-lg transition font-semibold"
+              >
+                Agregar
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Nombre
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Unidad
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Costo/unidad
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Stock
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Alerta
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consumables.map((c) => {
+                    const isLowStock = c.stockQty <= c.minStockAlert;
+                    return (
+                      <tr
+                        key={c.id}
+                        className={`border-b hover:bg-gray-50 transition ${
+                          isLowStock ? "bg-orange-50" : ""
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-sm font-medium">
+                          {c.name}
+                          {isLowStock && (
+                            <AlertTriangle
+                              className="inline ml-2 text-orange-600"
+                              size={16}
+                            />
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm">{c.unit}</td>
+                        <td className="px-4 py-3 text-sm">
+                          ${c.unitCost.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-bold">
+                          {c.stockQty}
+                        </td>
+                        <td className="px-4 py-3 text-sm">{c.minStockAlert}</td>
+                        <td className="px-4 py-3 flex gap-2">
+                          <button
+                            onClick={() => {
+                              const qty = prompt("Cantidad a agregar:");
+                              if (qty)
+                                updateConsumableStock(
+                                  c.id,
+                                  parseFloat(qty),
+                                  "add"
+                                );
+                            }}
+                            className="text-green-600 hover:text-green-800"
+                            title="Agregar stock"
+                          >
+                            <Plus size={18} />
+                          </button>
+                          <button
+                            onClick={() => deleteConsumable(c.id)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {catalogTab === "extras" && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">
+              Extras (Próximamente)
+            </h3>
+            <p className="text-gray-600">
+              Aquí podrás gestionar extras opcionales como diseños especiales,
+              tratamientos adicionales, etc.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ====== Owner (Principal) ======
   const OwnerDashboard = () => {
     const [newExpense, setNewExpense] = useState({
@@ -1407,9 +1965,10 @@ const SalonApp = () => {
       try {
         const userRef = doc(db, "users", userId);
         await updateDoc(userRef, { active: true });
+        showNotification("Usuario reactivado");
       } catch (error) {
         console.error("Error reactivating user:", error);
-        alert("Error al reactivar usuario");
+        showNotification("Error al reactivar usuario", "error");
       }
     };
 
@@ -1437,710 +1996,777 @@ const SalonApp = () => {
                 <p className="text-purple-100">Control total del salón</p>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setCurrentUser(null);
-                showNotification("Sesión cerrada");
-              }}
-              className="flex items-center gap-2 bg-white/20 backdrop-blur-md text-white px-4 py-2 rounded-lg hover:bg-white/30 transition shadow-md border border-white/30"
-            >
-              <LogOut size={20} />
-              Salir
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() =>
+                  setOwnerTab(ownerTab === "dashboard" ? "config" : "dashboard")
+                }
+                className="flex items-center gap-2 bg-white/20 backdrop-blur-md text-white px-4 py-2 rounded-lg hover:bg-white/30 transition shadow-md border border-white/30"
+              >
+                {ownerTab === "dashboard" ? (
+                  <>
+                    <Settings size={20} />
+                    Configuración
+                  </>
+                ) : (
+                  <>
+                    <BarChart3 size={20} />
+                    Dashboard
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentUser(null);
+                  showNotification("Sesión cerrada");
+                }}
+                className="flex items-center gap-2 bg-white/20 backdrop-blur-md text-white px-4 py-2 rounded-lg hover:bg-white/30 transition shadow-md border border-white/30"
+              >
+                <LogOut size={20} />
+                Salir
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto p-6">
-          <div className="bg-white rounded-xl shadow-md p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-              <input
-                type="date"
-                value={ownerFilters.dateFrom}
-                onChange={(e) =>
-                  setOwnerFilters({ ...ownerFilters, dateFrom: e.target.value })
-                }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
-                placeholder="Desde"
-              />
-              <input
-                type="date"
-                value={ownerFilters.dateTo}
-                onChange={(e) =>
-                  setOwnerFilters({ ...ownerFilters, dateTo: e.target.value })
-                }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
-                placeholder="Hasta"
-              />
-              <select
-                value={ownerFilters.paymentMethod}
-                onChange={(e) =>
-                  setOwnerFilters({
-                    ...ownerFilters,
-                    paymentMethod: e.target
-                      .value as OwnerFilters["paymentMethod"],
-                  })
-                }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
-              >
-                <option value="all">Todos los pagos</option>
-                <option value="cash">Efectivo</option>
-                <option value="transfer">Transferencia</option>
-              </select>
-              <div className="relative md:col-span-2">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  size={18}
-                />
-                <input
-                  type="text"
-                  placeholder="Buscar (cliente, servicio, personal, gasto)..."
-                  value={ownerFilters.search}
-                  onChange={(e) =>
-                    setOwnerFilters({ ...ownerFilters, search: e.target.value })
-                  }
-                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={ownerFilters.includeDeleted}
-                  onChange={(e) =>
-                    setOwnerFilters({
-                      ...ownerFilters,
-                      includeDeleted: e.target.checked,
-                    })
-                  }
-                />
-                Ver eliminados
-              </label>
-            </div>
-            <div className="mt-3">
-              <button
-                onClick={() =>
-                  setOwnerFilters({
-                    dateFrom: "",
-                    dateTo: "",
-                    paymentMethod: "all",
-                    includeDeleted: false,
-                    search: "",
-                  })
-                }
-                className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition"
-              >
-                Limpiar filtros
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
-            <div className="bg-gradient-to-br from-green-400 to-green-600 text-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-green-100 text-sm font-medium">Ingresos</p>
-                  <p className="text-3xl font-bold mt-2">
-                    ${totalIncome.toFixed(2)}
-                  </p>
-                  <p className="text-green-100 text-sm mt-1">
-                    {ownerServices.length} servicios
-                  </p>
-                </div>
-                <TrendingUp size={48} className="opacity-50" />
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-orange-400 to-amber-600 text-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-orange-100 text-sm font-medium">
-                    Comisiones
-                  </p>
-                  <p className="text-3xl font-bold mt-2">
-                    ${totalCommissions.toFixed(2)}
-                  </p>
-                  <p className="text-orange-100 text-sm mt-1">
-                    según % de cada servicio
-                  </p>
-                </div>
-                <Percent size={48} className="opacity-50" />
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-red-400 to-red-600 text-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-red-100 text-sm font-medium">Gastos</p>
-                  <p className="text-3xl font-bold mt-2">
-                    ${totalExpenses.toFixed(2)}
-                  </p>
-                  <p className="text-red-100 text-sm mt-1">
-                    {ownerExpenses.length} gastos
-                  </p>
-                </div>
-                <DollarSign size={48} className="opacity-50" />
-              </div>
-            </div>
-
-            <div
-              className={`bg-gradient-to-br ${
-                netProfit >= 0
-                  ? "from-blue-400 to-blue-600"
-                  : "from-gray-400 to-gray-600"
-              } text-white rounded-xl shadow-lg p-6`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100 text-sm font-medium">
-                    Utilidad neta
-                  </p>
-                  <p className="text-3xl font-bold mt-2">
-                    ${netProfit.toFixed(2)}
-                  </p>
-                  <p className="text-blue-100 text-sm mt-1">
-                    ingresos - comisiones - gastos
-                  </p>
-                </div>
-                <BarChart3 size={48} className="opacity-50" />
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between mb-3">
-                <Wallet size={32} className="opacity-80" />
-                <p className="text-purple-100 text-xs font-bold uppercase">
-                  Cierre de Caja
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm flex items-center gap-1">
-                    <DollarSign size={14} /> Efectivo
-                  </span>
-                  <span className="font-bold">
-                    ${byPayment.cash.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm flex items-center gap-1">
-                    <CreditCard size={14} /> Transfer.
-                  </span>
-                  <span className="font-bold">
-                    ${byPayment.transfer.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Users size={24} className="text-purple-500" />
-                Personal y Comisiones (%)
-              </h2>
-
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {staffStats.map((staff) => {
-                  const isOwner = staff.role === "owner";
-                  const draft = commissionDraft[staff.id];
-                  const shownDraft =
-                    draft !== undefined
-                      ? draft
-                      : String(staff.commissionPct ?? 0);
-
-                  return (
-                    <div
-                      key={staff.id}
-                      className="p-4 bg-gradient-to-r from-gray-50 to-purple-50 rounded-lg border border-purple-100 hover:shadow-md transition"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`bg-gradient-to-r ${staff.color} text-white w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-lg`}
-                          >
-                            {isOwner ? <Crown size={18} /> : <User size={18} />}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-800">
-                              {staff.name}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {staff.count} servicios (rango)
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {!isOwner && (
-                            <>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  value={shownDraft}
-                                  onChange={(e) =>
-                                    setCommissionDraft({
-                                      ...commissionDraft,
-                                      [staff.id]: e.target.value,
-                                    })
-                                  }
-                                  className="w-20 px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-center font-bold text-gray-900 bg-white"
-                                />
-                                <span className="text-gray-600 font-semibold">
-                                  %
-                                </span>
-                              </div>
-
-                              <button
-                                onClick={() => saveCommission(staff.id)}
-                                className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition"
-                                title="Guardar comisión"
-                              >
-                                <Save size={16} />
-                              </button>
-                            </>
-                          )}
-
-                          {!isOwner && (
-                            <button
-                              onClick={() => deactivateUser(staff.id)}
-                              className="text-red-600 hover:text-red-800 transition"
-                              title="Desactivar usuario"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-                        <div className="bg-white rounded-lg p-3 border">
-                          <p className="text-gray-500">Bruto</p>
-                          <p className="font-bold text-green-700">
-                            ${staff.gross.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 border">
-                          <p className="text-gray-500">Comisión</p>
-                          <p className="font-bold text-orange-700">
-                            ${staff.commissions.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 border">
-                          <p className="text-gray-500">Neto salón</p>
-                          <p className="font-bold text-blue-700">
-                            ${staff.salonNet.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <button
-                onClick={() => setShowAddUser(!showAddUser)}
-                className="w-full mt-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-lg hover:from-purple-600 hover:to-pink-600 transition font-semibold shadow-md"
-              >
-                + Agregar nuevo personal
-              </button>
-
-              {showAddUser && (
-                <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg space-y-3 border border-purple-200">
+          {ownerTab === "config" ? (
+            <OwnerConfigTab />
+          ) : (
+            <>
+              <div className="bg-white rounded-xl shadow-md p-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                   <input
-                    type="text"
-                    placeholder="Nombre completo"
-                    value={newUser.name}
+                    type="date"
+                    value={ownerFilters.dateFrom}
                     onChange={(e) =>
-                      setNewUser({ ...newUser, name: e.target.value })
+                      setOwnerFilters({
+                        ...ownerFilters,
+                        dateFrom: e.target.value,
+                      })
                     }
-                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                    className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                    placeholder="Desde"
                   />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    type="date"
+                    value={ownerFilters.dateTo}
+                    onChange={(e) =>
+                      setOwnerFilters({
+                        ...ownerFilters,
+                        dateTo: e.target.value,
+                      })
+                    }
+                    className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                    placeholder="Hasta"
+                  />
+                  <select
+                    value={ownerFilters.paymentMethod}
+                    onChange={(e) =>
+                      setOwnerFilters({
+                        ...ownerFilters,
+                        paymentMethod: e.target
+                          .value as OwnerFilters["paymentMethod"],
+                      })
+                    }
+                    className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                  >
+                    <option value="all">Todos los pagos</option>
+                    <option value="cash">Efectivo</option>
+                    <option value="transfer">Transferencia</option>
+                  </select>
+                  <div className="relative md:col-span-2">
+                    <Search
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={18}
+                    />
                     <input
                       type="text"
-                      placeholder="PIN (4 dígitos)"
-                      value={newUser.pin}
+                      placeholder="Buscar (cliente, servicio, personal, gasto)..."
+                      value={ownerFilters.search}
                       onChange={(e) =>
-                        setNewUser({
-                          ...newUser,
-                          pin: e.target.value.replace(/\D/g, "").slice(0, 4),
+                        setOwnerFilters({
+                          ...ownerFilters,
+                          search: e.target.value,
                         })
                       }
-                      maxLength={4}
-                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                      className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                     />
-                    <div className="flex items-center gap-2">
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={ownerFilters.includeDeleted}
+                      onChange={(e) =>
+                        setOwnerFilters({
+                          ...ownerFilters,
+                          includeDeleted: e.target.checked,
+                        })
+                      }
+                    />
+                    Ver eliminados
+                  </label>
+                </div>
+                <div className="mt-3">
+                  <button
+                    onClick={() =>
+                      setOwnerFilters({
+                        dateFrom: "",
+                        dateTo: "",
+                        paymentMethod: "all",
+                        includeDeleted: false,
+                        search: "",
+                      })
+                    }
+                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition"
+                  >
+                    Limpiar filtros
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
+                <div className="bg-gradient-to-br from-green-400 to-green-600 text-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-100 text-sm font-medium">
+                        Ingresos
+                      </p>
+                      <p className="text-3xl font-bold mt-2">
+                        ${totalIncome.toFixed(2)}
+                      </p>
+                      <p className="text-green-100 text-sm mt-1">
+                        {ownerServices.length} servicios
+                      </p>
+                    </div>
+                    <TrendingUp size={48} className="opacity-50" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-orange-400 to-amber-600 text-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-orange-100 text-sm font-medium">
+                        Comisiones
+                      </p>
+                      <p className="text-3xl font-bold mt-2">
+                        ${totalCommissions.toFixed(2)}
+                      </p>
+                      <p className="text-orange-100 text-sm mt-1">
+                        según % de cada servicio
+                      </p>
+                    </div>
+                    <Percent size={48} className="opacity-50" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-red-400 to-red-600 text-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-red-100 text-sm font-medium">Gastos</p>
+                      <p className="text-3xl font-bold mt-2">
+                        ${totalExpenses.toFixed(2)}
+                      </p>
+                      <p className="text-red-100 text-sm mt-1">
+                        {ownerExpenses.length} gastos
+                      </p>
+                    </div>
+                    <DollarSign size={48} className="opacity-50" />
+                  </div>
+                </div>
+
+                <div
+                  className={`bg-gradient-to-br ${
+                    netProfit >= 0
+                      ? "from-blue-400 to-blue-600"
+                      : "from-gray-400 to-gray-600"
+                  } text-white rounded-xl shadow-lg p-6`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-blue-100 text-sm font-medium">
+                        Utilidad neta
+                      </p>
+                      <p className="text-3xl font-bold mt-2">
+                        ${netProfit.toFixed(2)}
+                      </p>
+                      <p className="text-blue-100 text-sm mt-1">
+                        ingresos - comisiones - gastos
+                      </p>
+                    </div>
+                    <BarChart3 size={48} className="opacity-50" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <Wallet size={32} className="opacity-80" />
+                    <p className="text-purple-100 text-xs font-bold uppercase">
+                      Cierre de Caja
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm flex items-center gap-1">
+                        <DollarSign size={14} /> Efectivo
+                      </span>
+                      <span className="font-bold">
+                        ${byPayment.cash.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm flex items-center gap-1">
+                        <CreditCard size={14} /> Transfer.
+                      </span>
+                      <span className="font-bold">
+                        ${byPayment.transfer.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-white rounded-xl shadow-md p-6">
+                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <Users size={24} className="text-purple-500" />
+                    Personal y Comisiones (%)
+                  </h2>
+
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {staffStats.map((staff) => {
+                      const isOwner = staff.role === "owner";
+                      const draft = commissionDraft[staff.id];
+                      const shownDraft =
+                        draft !== undefined
+                          ? draft
+                          : String(staff.commissionPct ?? 0);
+
+                      return (
+                        <div
+                          key={staff.id}
+                          className="p-4 bg-gradient-to-r from-gray-50 to-purple-50 rounded-lg border border-purple-100 hover:shadow-md transition"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`bg-gradient-to-r ${staff.color} text-white w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-lg`}
+                              >
+                                {isOwner ? (
+                                  <Crown size={18} />
+                                ) : (
+                                  <User size={18} />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-800">
+                                  {staff.name}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {staff.count} servicios (rango)
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {!isOwner && (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="100"
+                                      value={shownDraft}
+                                      onChange={(e) =>
+                                        setCommissionDraft({
+                                          ...commissionDraft,
+                                          [staff.id]: e.target.value,
+                                        })
+                                      }
+                                      className="w-20 px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-center font-bold text-gray-900 bg-white"
+                                    />
+                                    <span className="text-gray-600 font-semibold">
+                                      %
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    onClick={() => saveCommission(staff.id)}
+                                    className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition"
+                                    title="Guardar comisión"
+                                  >
+                                    <Save size={16} />
+                                  </button>
+                                </>
+                              )}
+
+                              {!isOwner && (
+                                <button
+                                  onClick={() => deactivateUser(staff.id)}
+                                  className="text-red-600 hover:text-red-800 transition"
+                                  title="Desactivar usuario"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                            <div className="bg-white rounded-lg p-3 border">
+                              <p className="text-gray-500">Bruto</p>
+                              <p className="font-bold text-green-700">
+                                ${staff.gross.toFixed(2)}
+                              </p>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border">
+                              <p className="text-gray-500">Comisión</p>
+                              <p className="font-bold text-orange-700">
+                                ${staff.commissions.toFixed(2)}
+                              </p>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border">
+                              <p className="text-gray-500">Neto salón</p>
+                              <p className="font-bold text-blue-700">
+                                ${staff.salonNet.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => setShowAddUser(!showAddUser)}
+                    className="w-full mt-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-lg hover:from-purple-600 hover:to-pink-600 transition font-semibold shadow-md"
+                  >
+                    + Agregar nuevo personal
+                  </button>
+
+                  {showAddUser && (
+                    <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg space-y-3 border border-purple-200">
                       <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="Comisión %"
-                        value={newUser.commissionPct}
+                        type="text"
+                        placeholder="Nombre completo"
+                        value={newUser.name}
                         onChange={(e) =>
-                          setNewUser({
-                            ...newUser,
-                            commissionPct: e.target.value,
-                          })
+                          setNewUser({ ...newUser, name: e.target.value })
                         }
                         className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
                       />
-                      <span className="font-bold text-gray-600">%</span>
-                    </div>
-                  </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={addUser}
-                      className="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-semibold"
-                    >
-                      Guardar
-                    </button>
-                    <button
-                      onClick={() => setShowAddUser(false)}
-                      className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Usuarios Inactivos */}
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 border-2 border-gray-200 mb-6">
-              <div className="flex items-center gap-3 mb-6">
-                <UserX className="w-7 h-7 text-gray-500" />
-                <h2 className="text-2xl font-bold text-gray-800">
-                  Usuarios Inactivos
-                </h2>
-              </div>
-
-              {users.filter((u) => u.active === false).length === 0 ? (
-                <p className="text-gray-500 text-center py-4">
-                  No hay usuarios inactivos
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {users
-                    .filter((u) => u.active === false)
-                    .map((user) => (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border-2 border-gray-200"
-                      >
-                        <div className="flex items-center gap-3">
-                          <UserX className="w-5 h-5 text-gray-400" />
-                          <div>
-                            <p className="font-bold text-gray-700">
-                              {user.name}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              Comisión: {user.commissionPct}%
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`¿Reactivar a ${user.name}?`)) {
-                              reactivateUser(user.id);
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input
+                          type="text"
+                          placeholder="PIN (4 dígitos)"
+                          value={newUser.pin}
+                          onChange={(e) =>
+                            setNewUser({
+                              ...newUser,
+                              pin: e.target.value
+                                .replace(/\D/g, "")
+                                .slice(0, 4),
+                            })
+                          }
+                          maxLength={4}
+                          className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            placeholder="Comisión %"
+                            value={newUser.commissionPct}
+                            onChange={(e) =>
+                              setNewUser({
+                                ...newUser,
+                                commissionPct: e.target.value,
+                              })
                             }
-                          }}
-                          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all flex items-center gap-2"
+                            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                          />
+                          <span className="font-bold text-gray-600">%</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={addUser}
+                          className="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-semibold"
                         >
-                          <UserCheck className="w-4 h-4" />
-                          Reactivar
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => setShowAddUser(false)}
+                          className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
+                        >
+                          Cancelar
                         </button>
                       </div>
-                    ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <DollarSign size={24} className="text-red-500" />
-                Registrar gasto
-              </h2>
+                <div className="space-y-6">
+                  {/* Usuarios Inactivos */}
+                  <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border-2 border-gray-200">
+                    <div className="flex items-center gap-3 mb-4">
+                      <UserX className="w-6 h-6 text-gray-500" />
+                      <h2 className="text-xl font-bold text-gray-800">
+                        Usuarios Inactivos
+                      </h2>
+                    </div>
 
-              <div className="space-y-3">
-                <input
-                  type="date"
-                  value={newExpense.date}
-                  onChange={(e) =>
-                    setNewExpense({ ...newExpense, date: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
-                />
-                <select
-                  value={newExpense.category}
-                  onChange={(e) =>
-                    setNewExpense({ ...newExpense, category: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
-                >
-                  <option value="reposicion">Reposición</option>
-                  <option value="servicios">Servicios (luz, agua, etc.)</option>
-                  <option value="mantenimiento">Mantenimiento</option>
-                  <option value="salarios">Salarios</option>
-                  <option value="marketing">Marketing</option>
-                  <option value="otros">Otros</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Descripción del gasto"
-                  value={newExpense.description}
-                  onChange={(e) =>
-                    setNewExpense({
-                      ...newExpense,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Monto $"
-                  value={newExpense.amount}
-                  onChange={(e) =>
-                    setNewExpense({ ...newExpense, amount: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
-                />
-                <button
-                  onClick={addExpense}
-                  className="w-full bg-gradient-to-r from-red-500 to-pink-500 text-white py-3 rounded-lg hover:from-red-600 hover:to-pink-600 transition font-semibold shadow-md"
-                >
-                  Registrar gasto
-                </button>
+                    {users.filter((u) => u.active === false).length === 0 ? (
+                      <p className="text-gray-500 text-center py-4 text-sm">
+                        No hay usuarios inactivos
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {users
+                          .filter((u) => u.active === false)
+                          .map((user) => (
+                            <div
+                              key={user.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border-2 border-gray-200"
+                            >
+                              <div className="flex items-center gap-3">
+                                <UserX className="w-5 h-5 text-gray-400" />
+                                <div>
+                                  <p className="font-bold text-gray-700 text-sm">
+                                    {user.name}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Comisión: {user.commissionPct}%
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (
+                                    window.confirm(`¿Reactivar a ${user.name}?`)
+                                  ) {
+                                    reactivateUser(user.id);
+                                  }
+                                }}
+                                className="px-3 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all flex items-center gap-2 text-sm"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                                Reactivar
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Gastos */}
+                  <div className="bg-white rounded-xl shadow-md p-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <DollarSign size={24} className="text-red-500" />
+                      Registrar gasto
+                    </h2>
+
+                    <div className="space-y-3">
+                      <input
+                        type="date"
+                        value={newExpense.date}
+                        onChange={(e) =>
+                          setNewExpense({ ...newExpense, date: e.target.value })
+                        }
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
+                      />
+                      <select
+                        value={newExpense.category}
+                        onChange={(e) =>
+                          setNewExpense({
+                            ...newExpense,
+                            category: e.target.value,
+                          })
+                        }
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
+                      >
+                        <option value="reposicion">Reposición</option>
+                        <option value="servicios">
+                          Servicios (luz, agua, etc.)
+                        </option>
+                        <option value="mantenimiento">Mantenimiento</option>
+                        <option value="salarios">Salarios</option>
+                        <option value="marketing">Marketing</option>
+                        <option value="otros">Otros</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Descripción del gasto"
+                        value={newExpense.description}
+                        onChange={(e) =>
+                          setNewExpense({
+                            ...newExpense,
+                            description: e.target.value,
+                          })
+                        }
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Monto $"
+                        value={newExpense.amount}
+                        onChange={(e) =>
+                          setNewExpense({
+                            ...newExpense,
+                            amount: e.target.value,
+                          })
+                        }
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
+                      />
+                      <button
+                        onClick={addExpense}
+                        className="w-full bg-gradient-to-r from-red-500 to-pink-500 text-white py-3 rounded-lg hover:from-red-600 hover:to-pink-600 transition font-semibold shadow-md"
+                      >
+                        Registrar gasto
+                      </button>
+                    </div>
+
+                    <div className="mt-6 bg-gray-50 rounded-lg border overflow-hidden">
+                      <div className="p-4 border-b flex items-center justify-between">
+                        <p className="font-semibold text-gray-700">
+                          Gastos (rango)
+                        </p>
+                        <button
+                          onClick={() =>
+                            exportToCSV(ownerExpenses, "gastos_rango")
+                          }
+                          className="flex items-center gap-2 bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-sm"
+                        >
+                          <Download size={16} />
+                          CSV
+                        </button>
+                      </div>
+                      <div className="max-h-60 overflow-auto">
+                        {ownerExpenses.length === 0 ? (
+                          <p className="p-4 text-gray-500 text-sm">
+                            No hay gastos en este rango
+                          </p>
+                        ) : (
+                          ownerExpenses
+                            .slice()
+                            .reverse()
+                            .map((e) => (
+                              <div
+                                key={e.id}
+                                className="p-4 border-b flex items-center justify-between gap-3"
+                              >
+                                <div className="min-w-0">
+                                  <p
+                                    className={`text-sm font-semibold text-gray-800 truncate ${
+                                      e.deleted ? "line-through opacity-60" : ""
+                                    }`}
+                                  >
+                                    {e.description}{" "}
+                                    <span className="text-gray-400">
+                                      ({e.category})
+                                    </span>
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {e.date}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <p
+                                    className={`font-bold ${
+                                      e.deleted
+                                        ? "text-gray-500"
+                                        : "text-red-600"
+                                    }`}
+                                  >
+                                    ${Number(e.amount).toFixed(2)}
+                                  </p>
+                                  {!e.deleted && (
+                                    <button
+                                      onClick={() => softDeleteExpense(e.id)}
+                                      className="text-red-600 hover:text-red-800"
+                                      title="Eliminar (historial)"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-6 bg-gray-50 rounded-lg border overflow-hidden">
-                <div className="p-4 border-b flex items-center justify-between">
-                  <p className="font-semibold text-gray-700">Gastos (rango)</p>
+              <div className="bg-white rounded-xl shadow-md overflow-hidden">
+                <div className="p-6 bg-gradient-to-r from-green-50 to-blue-50 border-b flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Servicios (rango)
+                  </h2>
                   <button
-                    onClick={() => exportToCSV(ownerExpenses, "gastos_rango")}
-                    className="flex items-center gap-2 bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-sm"
+                    onClick={() =>
+                      exportToCSV(
+                        ownerServices.map((s) => ({
+                          ...s,
+                          commissionPct: getCommissionPctForService(s),
+                          commissionAmount: calcCommissionAmount(s),
+                          salonNet:
+                            (Number(s.cost) || 0) - calcCommissionAmount(s),
+                          paymentMethodLabel:
+                            s.paymentMethod === "transfer"
+                              ? "Transferencia"
+                              : "Efectivo",
+                        })),
+                        "servicios_rango"
+                      )
+                    }
+                    className="flex items-center gap-2 bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-sm"
                   >
                     <Download size={16} />
                     CSV
                   </button>
                 </div>
-                <div className="max-h-60 overflow-auto">
-                  {ownerExpenses.length === 0 ? (
-                    <p className="p-4 text-gray-500 text-sm">
-                      No hay gastos en este rango
-                    </p>
-                  ) : (
-                    ownerExpenses
-                      .slice()
-                      .reverse()
-                      .map((e) => (
-                        <div
-                          key={e.id}
-                          className="p-4 border-b flex items-center justify-between gap-3"
-                        >
-                          <div className="min-w-0">
-                            <p
-                              className={`text-sm font-semibold text-gray-800 truncate ${
-                                e.deleted ? "line-through opacity-60" : ""
-                              }`}
-                            >
-                              {e.description}{" "}
-                              <span className="text-gray-400">
-                                ({e.category})
-                              </span>
-                            </p>
-                            <p className="text-xs text-gray-500">{e.date}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <p
-                              className={`font-bold ${
-                                e.deleted ? "text-gray-500" : "text-red-600"
-                              }`}
-                            >
-                              ${Number(e.amount).toFixed(2)}
-                            </p>
-                            {!e.deleted && (
-                              <button
-                                onClick={() => softDeleteExpense(e.id)}
-                                className="text-red-600 hover:text-red-800"
-                                title="Eliminar (historial)"
+
+                <div className="overflow-x-auto max-h-96">
+                  <table className="w-full">
+                    <thead className="bg-gray-100 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Fecha
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Personal
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Cliente
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Servicio
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Pago
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Costo
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          %
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Comisión
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Neto salón
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                          Estado
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ownerServices.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={10}
+                            className="px-4 py-8 text-center text-gray-500"
+                          >
+                            No hay servicios en este rango
+                          </td>
+                        </tr>
+                      ) : (
+                        ownerServices
+                          .slice()
+                          .reverse()
+                          .map((s) => {
+                            const pct = getCommissionPctForService(s);
+                            const com = calcCommissionAmount(s);
+                            const net = (Number(s.cost) || 0) - com;
+                            return (
+                              <tr
+                                key={s.id}
+                                className="border-b hover:bg-gray-50 transition"
                               >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                  )}
+                                <td
+                                  className={`px-4 py-3 text-sm ${
+                                    s.deleted ? "line-through opacity-60" : ""
+                                  }`}
+                                >
+                                  {s.date}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-sm font-medium ${
+                                    s.deleted ? "line-through opacity-60" : ""
+                                  }`}
+                                >
+                                  {s.userName}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-sm ${
+                                    s.deleted ? "line-through opacity-60" : ""
+                                  }`}
+                                >
+                                  {s.client}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-sm ${
+                                    s.deleted ? "line-through opacity-60" : ""
+                                  }`}
+                                >
+                                  {s.service}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-sm ${
+                                    s.deleted ? "line-through opacity-60" : ""
+                                  }`}
+                                >
+                                  {s.paymentMethod === "transfer"
+                                    ? "Transferencia"
+                                    : "Efectivo"}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-sm font-bold ${
+                                    s.deleted
+                                      ? "text-gray-500"
+                                      : "text-green-700"
+                                  }`}
+                                >
+                                  ${Number(s.cost).toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3 text-sm font-bold text-gray-700">
+                                  {pct.toFixed(0)}%
+                                </td>
+                                <td className="px-4 py-3 text-sm font-bold text-orange-700">
+                                  ${com.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3 text-sm font-bold text-blue-700">
+                                  ${net.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  {s.deleted ? (
+                                    <span className="text-gray-500 font-semibold">
+                                      Eliminado
+                                    </span>
+                                  ) : (
+                                    <span className="text-green-700 font-semibold">
+                                      Activo
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md overflow-hidden">
-            <div className="p-6 bg-gradient-to-r from-green-50 to-blue-50 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-800">
-                Servicios (rango)
-              </h2>
-              <button
-                onClick={() =>
-                  exportToCSV(
-                    ownerServices.map((s) => ({
-                      ...s,
-                      commissionPct: getCommissionPctForService(s),
-                      commissionAmount: calcCommissionAmount(s),
-                      salonNet: (Number(s.cost) || 0) - calcCommissionAmount(s),
-                      paymentMethodLabel:
-                        s.paymentMethod === "transfer"
-                          ? "Transferencia"
-                          : "Efectivo",
-                    })),
-                    "servicios_rango"
-                  )
-                }
-                className="flex items-center gap-2 bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-sm"
-              >
-                <Download size={16} />
-                CSV
-              </button>
-            </div>
-
-            <div className="overflow-x-auto max-h-96">
-              <table className="w-full">
-                <thead className="bg-gray-100 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Fecha
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Personal
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Cliente
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Servicio
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Pago
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Costo
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      %
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Comisión
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Neto salón
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                      Estado
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ownerServices.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={10}
-                        className="px-4 py-8 text-center text-gray-500"
-                      >
-                        No hay servicios en este rango
-                      </td>
-                    </tr>
-                  ) : (
-                    ownerServices
-                      .slice()
-                      .reverse()
-                      .map((s) => {
-                        const pct = getCommissionPctForService(s);
-                        const com = calcCommissionAmount(s);
-                        const net = (Number(s.cost) || 0) - com;
-                        return (
-                          <tr
-                            key={s.id}
-                            className="border-b hover:bg-gray-50 transition"
-                          >
-                            <td
-                              className={`px-4 py-3 text-sm ${
-                                s.deleted ? "line-through opacity-60" : ""
-                              }`}
-                            >
-                              {s.date}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-sm font-medium ${
-                                s.deleted ? "line-through opacity-60" : ""
-                              }`}
-                            >
-                              {s.userName}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-sm ${
-                                s.deleted ? "line-through opacity-60" : ""
-                              }`}
-                            >
-                              {s.client}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-sm ${
-                                s.deleted ? "line-through opacity-60" : ""
-                              }`}
-                            >
-                              {s.service}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-sm ${
-                                s.deleted ? "line-through opacity-60" : ""
-                              }`}
-                            >
-                              {s.paymentMethod === "transfer"
-                                ? "Transferencia"
-                                : "Efectivo"}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-sm font-bold ${
-                                s.deleted ? "text-gray-500" : "text-green-700"
-                              }`}
-                            >
-                              ${Number(s.cost).toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-sm font-bold text-gray-700">
-                              {pct.toFixed(0)}%
-                            </td>
-                            <td className="px-4 py-3 text-sm font-bold text-orange-700">
-                              ${com.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-sm font-bold text-blue-700">
-                              ${net.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {s.deleted ? (
-                                <span className="text-gray-500 font-semibold">
-                                  Eliminado
-                                </span>
-                              ) : (
-                                <span className="text-green-700 font-semibold">
-                                  Activo
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
     );
