@@ -151,13 +151,12 @@ const SalonApp = () => {
   });
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
-  const [consumables, setConsumables] = useState<Consumable[]>([]);
-  const [serviceRecipes, setServiceRecipes] = useState<ServiceRecipe[]>([]);
-  const [catalogExtras, setCatalogExtras] = useState<CatalogExtra[]>([]);
-  const [catalogTab, setCatalogTab] = useState<
-    "services" | "consumables" | "extras"
-  >("services");
+  //const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
+  //const [consumables, setConsumables] = useState<Consumable[]>([]);
+  //const [serviceRecipes, setServiceRecipes] = useState<ServiceRecipe[]>([]);
+  //const [catalogExtras, setCatalogExtras] = useState<CatalogExtra[]>([]);
+  //const [catalogTab, setCatalogTab] = useState<
+  "services" | "consumables" | ("extras" > "services");
 
   const [ownerFilters, setOwnerFilters] = useState<OwnerFilters>({
     dateFrom: "",
