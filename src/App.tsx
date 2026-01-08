@@ -497,56 +497,56 @@ const SalonApp = () => {
     return () => unsub();
   }, [initialized]);
 
-  // Cargar catálogo de servicios
-  useEffect(() => {
-    if (!initialized) return;
-    const q = query(collection(db, "catalog_services"), orderBy("name", "asc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as CatalogService)
-      );
-      setCatalogServices(data);
-    });
-    return () => unsub();
-  }, [initialized]);
+  // // Cargar catálogo de servicios
+  // useEffect(() => {
+  //   if (!initialized) return;
+  //   const q = query(collection(db, "catalog_services"), orderBy("name", "asc"));
+  //   const unsub = onSnapshot(q, (snap) => {
+  //     const data = snap.docs.map(
+  //       (d) => ({ id: d.id, ...d.data() } as CatalogService)
+  //     );
+  //     setCatalogServices(data);
+  //   });
+  //   return () => unsub();
+  // }, [initialized]);
 
-  // Cargar consumibles
-  useEffect(() => {
-    if (!initialized) return;
-    const q = query(collection(db, "consumables"), orderBy("name", "asc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as Consumable)
-      );
-      setConsumables(data);
-    });
-    return () => unsub();
-  }, [initialized]);
+  // // Cargar consumibles
+  // useEffect(() => {
+  //   if (!initialized) return;
+  //   const q = query(collection(db, "consumables"), orderBy("name", "asc"));
+  //   const unsub = onSnapshot(q, (snap) => {
+  //     const data = snap.docs.map(
+  //       (d) => ({ id: d.id, ...d.data() } as Consumable)
+  //     );
+  //     setConsumables(data);
+  //   });
+  //   return () => unsub();
+  // }, [initialized]);
 
-  // Cargar recetas
-  useEffect(() => {
-    if (!initialized) return;
-    const unsub = onSnapshot(collection(db, "service_recipes"), (snap) => {
-      const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as ServiceRecipe)
-      );
-      setServiceRecipes(data);
-    });
-    return () => unsub();
-  }, [initialized]);
+  // // Cargar recetas
+  // useEffect(() => {
+  //   if (!initialized) return;
+  //   const unsub = onSnapshot(collection(db, "service_recipes"), (snap) => {
+  //     const data = snap.docs.map(
+  //       (d) => ({ id: d.id, ...d.data() } as ServiceRecipe)
+  //     );
+  //     setServiceRecipes(data);
+  //   });
+  //   return () => unsub();
+  // }, [initialized]);
 
-  // Cargar extras
-  useEffect(() => {
-    if (!initialized) return;
-    const q = query(collection(db, "catalog_extras"), orderBy("name", "asc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as CatalogExtra)
-      );
-      setCatalogExtras(data);
-    });
-    return () => unsub();
-  }, [initialized]);
+  //   // Cargar extras
+  //   useEffect(() => {
+  //     if (!initialized) return;
+  //     const q = query(collection(db, "catalog_extras"), orderBy("name", "asc"));
+  //     const unsub = onSnapshot(q, (snap) => {
+  //       const data = snap.docs.map(
+  //         (d) => ({ id: d.id, ...d.data() } as CatalogExtra)
+  //       );
+  //       setCatalogExtras(data);
+  //     });
+  //     return () => unsub();
+  //   }, [initialized]);
 
   // ====== Notificaciones ======
   const showNotification = (
