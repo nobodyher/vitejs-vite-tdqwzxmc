@@ -789,7 +789,7 @@ const SalonApp = () => {
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center">
           <div className="text-center">
             <div className="inline-block bg-gradient-to-r from-purple-600 to-pink-600 p-4 rounded-3xl shadow-2xl mb-6 animate-pulse">
-              <Scissors className="text-white" size={56} />
+              <TrendingUp className="text-white" size={56} />
             </div>
             <p className="text-gray-600 text-lg font-medium">Cargando...</p>
           </div>
@@ -802,7 +802,7 @@ const SalonApp = () => {
         <div className="w-full max-w-5xl">
           <div className="text-center mb-12">
             <div className="inline-block bg-gradient-to-r from-purple-600 to-pink-600 p-4 rounded-3xl shadow-2xl mb-6">
-              <Scissors className="text-white" size={56} />
+              <TrendingUp className="text-white" size={56} />
             </div>
             <h1 className="text-5xl font-black text-gray-800 mb-3 tracking-tight">
               Blossom Nails
@@ -1432,15 +1432,6 @@ const SalonApp = () => {
                   </p>
                   <p className="text-3xl font-bold text-pink-600">
                     ${totalCost.toFixed(2)}
-                  </p>
-                  <p className="text-sm text-gray-600 font-semibold mt-2">
-                    Costo Reposición:
-                  </p>
-                  <p className="text-lg font-bold text-orange-600">
-                    $
-                    {calculateTotalReplenishmentCost(
-                      newService.services
-                    ).toFixed(2)}
                   </p>
                 </div>
                 <button
