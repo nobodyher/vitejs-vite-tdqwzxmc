@@ -88,6 +88,7 @@ type Service = {
   paymentMethod: PaymentMethod;
   commissionPct: number;
   category?: "manicura" | "pedicura"; // ✅ NUEVO
+  reposicion?: number; // ✅ NUEVO: Costo total de reposición de materiales
   deleted?: boolean;
 };
 
@@ -338,6 +339,26 @@ const SalonApp = () => {
   const getRecipeCost = (category?: string): number => {
     if (!category) return 0;
     return (RECIPE_COSTS as Record<string, number>)[category] || 0;
+  };
+
+  // ✅ NUEVO: Función para obtener el costo de materiales de una receta por serviceId
+  const getRecipeCostByServiceId = (serviceId?: string): number => {
+    if (!serviceId) return 0;
+
+    // Buscar la receta del servicio
+    const recipe = serviceRecipes.find((r) => r.id === serviceId);
+    if (!recipe) return 0;
+
+    // Calcular el costo total multiplicando qty × unitCost de cada consumible
+    let totalCost = 0;
+    recipe.items.forEach((item: any) => {
+      const consumable = consumables.find((c) => c.id === item.consumableId);
+      if (consumable) {
+        totalCost += item.qty * (consumable.unitCost || 0);
+      }
+    });
+
+    return totalCost;
   };
 
   // ====== Inicializar usuarios base (solo una vez) ======
@@ -928,6 +949,15 @@ const SalonApp = () => {
       return servicesTotal + extrasTotal;
     };
 
+    // ✅ NUEVO: Calcular el costo total de reposición de todos los servicios
+    const calculateTotalReplenishmentCost = (
+      servicesList: ServiceItem[]
+    ): number => {
+      return servicesList.reduce((sum, s) => {
+        return sum + getRecipeCostByServiceId(s.serviceId);
+      }, 0);
+    };
+
     // ✅ NUEVO: Al seleccionar del catálogo, agregar a lista de servicios
     const selectCatalogService = (cs: CatalogService) => {
       console.log("Seleccionando servicio:", cs);
@@ -1064,6 +1094,11 @@ const SalonApp = () => {
         100
       );
 
+      // ✅ NUEVO: Calcular el costo total de reposición sumando todos los servicios
+      const totalReposicion = calculateTotalReplenishmentCost(
+        newService.services
+      );
+
       try {
         const serviceData: any = {
           userId: currentUser?.id,
@@ -1076,6 +1111,7 @@ const SalonApp = () => {
           cost: parseFloat(cost.toFixed(2)),
           commissionPct,
           paymentMethod: newService.paymentMethod,
+          reposicion: parseFloat(totalReposicion.toFixed(2)), // ✅ NUEVO: Guardar costo total de reposición
           deleted: false,
           timestamp: serverTimestamp(),
         };
@@ -1396,6 +1432,15 @@ const SalonApp = () => {
                   </p>
                   <p className="text-3xl font-bold text-pink-600">
                     ${totalCost.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600 font-semibold mt-2">
+                    Costo Reposición:
+                  </p>
+                  <p className="text-lg font-bold text-orange-600">
+                    $
+                    {calculateTotalReplenishmentCost(
+                      newService.services
+                    ).toFixed(2)}
                   </p>
                 </div>
                 <button
@@ -1801,7 +1846,8 @@ const SalonApp = () => {
     );
 
     const totalReplenishmentCost = filteredServices.reduce((sum, s) => {
-      return sum + getRecipeCost(s.category);
+      // ✅ NUEVO: Usar el valor guardado de reposición, o calcular basado en categoría para compatibilidad
+      return sum + (s.reposicion || getRecipeCost(s.category));
     }, 0);
 
     const netProfit =
@@ -2406,7 +2452,7 @@ const SalonApp = () => {
                         ${calcCommissionAmount(service).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-sm font-bold text-orange-600">
-                        ${getRecipeCost(service.category).toFixed(2)}
+                        ${(service.reposicion || getRecipeCost(service.category)).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex gap-2">
