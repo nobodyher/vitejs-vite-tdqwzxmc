@@ -40,6 +40,7 @@ import {
   serverTimestamp,
   deleteDoc,
   getDoc,
+  getDocs,
 } from "firebase/firestore";
 
 import type { DocumentData } from "firebase/firestore";
@@ -54,7 +55,7 @@ type User = {
   pin: string;
   role: Role;
   color: string;
-  ow;
+  ow: string;
   icon: "crown" | "user";
   commissionPct: number;
   active: boolean;
@@ -99,6 +100,7 @@ type Expense = {
   description: string;
   category: string;
   amount: number;
+  userId?: string;
   deleted?: boolean;
 };
 
@@ -296,7 +298,7 @@ const SalonApp = () => {
     string | null
   >(null);
   const [editingConsumable, setEditingConsumable] = useState<string | null>(
-    null
+    null,
   );
 
   // ====== Helpers ======
@@ -305,10 +307,10 @@ const SalonApp = () => {
       typeof u.commissionPct === "number"
         ? clamp(u.commissionPct, 0, 100)
         : u.commissionPct != null
-        ? clamp(parseFloat(u.commissionPct) || 0, 0, 100)
-        : u.role === "owner"
-        ? 0
-        : 35;
+          ? clamp(parseFloat(u.commissionPct) || 0, 0, 100)
+          : u.role === "owner"
+            ? 0
+            : 35;
 
     return {
       id: u.id,
@@ -316,6 +318,7 @@ const SalonApp = () => {
       pin: String(u.pin ?? ""),
       role: u.role ?? "staff",
       color: u.color ?? "from-teal-500 to-emerald-600",
+      ow: u.ow ?? "",
       icon: u.icon ?? "user",
       commissionPct,
       active: u.active !== false,
@@ -414,7 +417,7 @@ const SalonApp = () => {
         tx.set(
           metaRef,
           { seeded: true, seededAt: serverTimestamp() },
-          { merge: true }
+          { merge: true },
         );
       });
 
@@ -571,7 +574,7 @@ const SalonApp = () => {
         tx.set(
           metaRef,
           { seeded: true, seededAt: serverTimestamp() },
-          { merge: true }
+          { merge: true },
         );
       });
 
@@ -599,7 +602,7 @@ const SalonApp = () => {
       q,
       (snap) => {
         const data = snap.docs.map((d) =>
-          normalizeUser({ id: d.id, ...d.data() })
+          normalizeUser({ id: d.id, ...d.data() }),
         );
         setUsers(data);
         setLoading(false);
@@ -608,7 +611,7 @@ const SalonApp = () => {
         console.error("Error cargando usuarios:", error);
         showNotification("Error cargando usuarios", "error");
         setLoading(false);
-      }
+      },
     );
 
     return () => unsub();
@@ -622,14 +625,14 @@ const SalonApp = () => {
       q,
       (snap) => {
         const data = snap.docs.map(
-          (d) => ({ id: d.id, ...d.data() } as Service)
+          (d) => ({ id: d.id, ...d.data() }) as Service,
         );
         setServices(data);
       },
       (error) => {
         console.error("Error cargando servicios:", error);
         showNotification("Error cargando servicios", "error");
-      }
+      },
     );
 
     return () => unsub();
@@ -643,14 +646,14 @@ const SalonApp = () => {
       q,
       (snap) => {
         const data = snap.docs.map(
-          (d) => ({ id: d.id, ...d.data() } as Expense)
+          (d) => ({ id: d.id, ...d.data() }) as Expense,
         );
         setExpenses(data);
       },
       (error) => {
         console.error("Error cargando gastos:", error);
         showNotification("Error cargando gastos", "error");
-      }
+      },
     );
 
     return () => unsub();
@@ -662,7 +665,7 @@ const SalonApp = () => {
     const q = query(collection(db, "catalog_services"), orderBy("name", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as CatalogService)
+        (d) => ({ id: d.id, ...d.data() }) as CatalogService,
       );
       setCatalogServices(data);
     });
@@ -675,7 +678,7 @@ const SalonApp = () => {
     const q = query(collection(db, "consumables"), orderBy("name", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as Consumable)
+        (d) => ({ id: d.id, ...d.data() }) as Consumable,
       );
       setConsumables(data);
     });
@@ -687,7 +690,7 @@ const SalonApp = () => {
     if (!initialized) return;
     const unsub = onSnapshot(collection(db, "service_recipes"), (snap) => {
       const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as ServiceRecipe)
+        (d) => ({ id: d.id, ...d.data() }) as ServiceRecipe,
       );
       setServiceRecipes(data);
     });
@@ -700,7 +703,7 @@ const SalonApp = () => {
     const q = query(collection(db, "catalog_extras"), orderBy("name", "asc"));
     const unsub = onSnapshot(q, async (snap) => {
       const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as CatalogExtra)
+        (d) => ({ id: d.id, ...d.data() }) as CatalogExtra,
       );
       setCatalogExtras(data);
 
@@ -716,7 +719,7 @@ const SalonApp = () => {
               priceSuggested: catalogExtra.priceSuggested,
             });
             console.log(
-              `✅ Sincronizado: ${extra.name} - $${catalogExtra.priceSuggested}`
+              `✅ Sincronizado: ${extra.name} - $${catalogExtra.priceSuggested}`,
             );
           } catch (error) {
             console.error(`❌ Error sincronizando ${extra.name}:`, error);
@@ -730,7 +733,7 @@ const SalonApp = () => {
   // ====== Notificaciones ======
   const showNotification = (
     message: string,
-    type: Toast["type"] = "success"
+    type: Toast["type"] = "success",
   ) => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 2800);
@@ -742,14 +745,14 @@ const SalonApp = () => {
       notification.type === "success"
         ? "bg-green-500"
         : notification.type === "error"
-        ? "bg-red-500"
-        : "bg-blue-500";
+          ? "bg-red-500"
+          : "bg-blue-500";
     const Icon =
       notification.type === "success"
         ? CheckCircle
         : notification.type === "error"
-        ? XCircle
-        : AlertTriangle;
+          ? XCircle
+          : AlertTriangle;
 
     return (
       <div
@@ -939,7 +942,7 @@ const SalonApp = () => {
     const [selectedServiceId, setSelectedServiceId] = useState("");
 
     const userServices = services.filter(
-      (s) => s.userId === currentUser?.id && !s.deleted
+      (s) => s.userId === currentUser?.id && !s.deleted,
     );
 
     const filteredServices = userServices.filter((s) => {
@@ -949,7 +952,7 @@ const SalonApp = () => {
         s.service?.toLowerCase().includes(filters.search.toLowerCase()) ||
         false ||
         s.services?.some((srv) =>
-          srv.serviceName.toLowerCase().includes(filters.search.toLowerCase())
+          srv.serviceName.toLowerCase().includes(filters.search.toLowerCase()),
         ) ||
         false;
       const matchDateFrom = !filters.dateFrom || s.date >= filters.dateFrom;
@@ -962,11 +965,11 @@ const SalonApp = () => {
     // ✅ NUEVO: Calcular costo total automáticamente
     const calculateTotalCost = (
       servicesList: ServiceItem[],
-      extrasList: ExtraItem[]
+      extrasList: ExtraItem[],
     ): number => {
       const servicesTotal = servicesList.reduce(
         (sum, s) => sum + s.servicePrice,
-        0
+        0,
       );
       const extrasTotal = extrasList.reduce((sum, e) => sum + e.totalPrice, 0);
       return servicesTotal + extrasTotal;
@@ -974,7 +977,7 @@ const SalonApp = () => {
 
     // ✅ NUEVO: Calcular el costo total de reposición de todos los servicios
     const calculateTotalReplenishmentCost = (
-      servicesList: ServiceItem[]
+      servicesList: ServiceItem[],
     ): number => {
       return servicesList.reduce((sum, s) => {
         return sum + getRecipeCostByServiceId(s.serviceId);
@@ -1045,7 +1048,7 @@ const SalonApp = () => {
 
     const totalCost = calculateTotalCost(
       newService.services,
-      newService.extras
+      newService.extras,
     );
 
     // Descuento de consumibles por servicio
@@ -1079,7 +1082,7 @@ const SalonApp = () => {
 
         // Actualizar cada consumible
         for (const [consumableName, quantity] of Object.entries(
-          consumablesToDeduct
+          consumablesToDeduct,
         )) {
           const consumableRef = doc(db, "consumables", consumableName);
           const consumableSnap = await getDoc(consumableRef);
@@ -1114,12 +1117,12 @@ const SalonApp = () => {
       const commissionPct = clamp(
         Number(currentUser?.commissionPct || 0),
         0,
-        100
+        100,
       );
 
       // ✅ NUEVO: Calcular el costo total de reposición sumando todos los servicios
       const totalReposicion = calculateTotalReplenishmentCost(
-        newService.services
+        newService.services,
       );
 
       try {
@@ -1273,7 +1276,7 @@ const SalonApp = () => {
                 onChange={(e) => {
                   if (e.target.value) {
                     const selected = activeServices.find(
-                      (cs) => cs.id === e.target.value
+                      (cs) => cs.id === e.target.value,
                     );
                     if (selected) {
                       selectCatalogService(selected);
@@ -1375,7 +1378,7 @@ const SalonApp = () => {
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                   {EXTRAS_CATALOG.filter((e) => e.active).map((extra) => {
                     const current = newService.extras.find(
-                      (e) => e.extraId === extra.id
+                      (e) => e.extraId === extra.id,
                     );
                     return (
                       <div
@@ -1400,7 +1403,7 @@ const SalonApp = () => {
                             onChange={(e) =>
                               updateExtraNailsCount(
                                 extra.id,
-                                parseInt(e.target.value || "0", 10)
+                                parseInt(e.target.value || "0", 10),
                               )
                             }
                             className="w-20 px-3 py-2 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-blue-500 focus:outline-none"
@@ -1482,7 +1485,7 @@ const SalonApp = () => {
             <p className="text-3xl font-bold">
               {
                 userServices.filter(
-                  (s) => s.date === new Date().toISOString().split("T")[0]
+                  (s) => s.date === new Date().toISOString().split("T")[0],
                 ).length
               }
             </p>
@@ -1637,7 +1640,7 @@ const SalonApp = () => {
                                     defaultValue={service.cost}
                                     onChange={(e) =>
                                       (editedService.cost = parseFloat(
-                                        e.target.value
+                                        e.target.value,
                                       ))
                                     }
                                     className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-pink-500 focus:outline-none"
@@ -1749,7 +1752,7 @@ const SalonApp = () => {
 
     // ✅ NUEVO: Estado para editar servicios
     const [editingServiceId, setEditingServiceId] = useState<string | null>(
-      null
+      null,
     );
     const [editingServiceCost, setEditingServiceCost] = useState("");
 
@@ -1775,7 +1778,7 @@ const SalonApp = () => {
     const softDeleteServiceAdmin = async (serviceId: string) => {
       if (
         !window.confirm(
-          "¿Eliminar temporalmente este servicio? (Se guardará como historial)"
+          "¿Eliminar temporalmente este servicio? (Se guardará como historial)",
         )
       )
         return;
@@ -1796,7 +1799,7 @@ const SalonApp = () => {
     const permanentlyDeleteService = async (serviceId: string) => {
       if (
         !window.confirm(
-          "¿Eliminar permanentemente este servicio? Esta acción no se puede deshacer."
+          "¿Eliminar permanentemente este servicio? Esta acción no se puede deshacer.",
         )
       )
         return;
@@ -1830,7 +1833,7 @@ const SalonApp = () => {
         !ownerFilters.search ||
         s.client.toLowerCase().includes(ownerFilters.search.toLowerCase()) ||
         (s.service?.toLowerCase() || "").includes(
-          ownerFilters.search.toLowerCase()
+          ownerFilters.search.toLowerCase(),
         ) ||
         s.userName.toLowerCase().includes(ownerFilters.search.toLowerCase());
       const matchDateFrom =
@@ -1858,7 +1861,7 @@ const SalonApp = () => {
     // Calcular comisiones desde servicios (SIN restar gastos de comisiones pagadas)
     const totalCommissions = filteredServices.reduce(
       (sum, s) => sum + calcCommissionAmount(s),
-      0
+      0,
     );
 
     let totalReplenishmentCost = filteredServices.reduce((sum, s) => {
@@ -2193,7 +2196,7 @@ const SalonApp = () => {
                       >
                         {stat.commission - stat.commissionPaid < 0 ? "-" : ""}$
                         {Math.abs(
-                          stat.commission - stat.commissionPaid
+                          stat.commission - stat.commissionPaid,
                         ).toFixed(2)}
                       </p>
                     </div>
@@ -2489,7 +2492,7 @@ const SalonApp = () => {
                               onClick={() =>
                                 updateServiceCost(
                                   service.id,
-                                  parseFloat(editingServiceCost)
+                                  parseFloat(editingServiceCost),
                                 )
                               }
                               className="text-green-600 hover:text-green-800"
@@ -2593,10 +2596,10 @@ const SalonApp = () => {
       "week" | "month" | "year" | "custom"
     >("week");
     const [customDateFrom, setCustomDateFrom] = useState(
-      new Date().toISOString().split("T")[0]
+      new Date().toISOString().split("T")[0],
     );
     const [customDateTo, setCustomDateTo] = useState(
-      new Date().toISOString().split("T")[0]
+      new Date().toISOString().split("T")[0],
     );
 
     // Calcular rango de fechas según filtro
@@ -2702,7 +2705,7 @@ const SalonApp = () => {
     });
 
     const topStaff = Object.entries(staffStats).sort(
-      ([, a], [, b]) => b.revenue - a.revenue
+      ([, a], [, b]) => b.revenue - a.revenue,
     )[0];
 
     // Servicio más vendido
@@ -2718,7 +2721,7 @@ const SalonApp = () => {
     });
 
     const topService = Object.entries(serviceStats).sort(
-      ([, a], [, b]) => b.count - a.count
+      ([, a], [, b]) => b.count - a.count,
     )[0];
 
     return (
@@ -2844,7 +2847,7 @@ const SalonApp = () => {
                 .filter(([day]) => day !== "Domingo")
                 .map(([day, data]) => {
                   const maxRevenue = Math.max(
-                    ...Object.values(weekdayData).map((d) => d.revenue)
+                    ...Object.values(weekdayData).map((d) => d.revenue),
                   );
                   const heightPercent =
                     maxRevenue > 0 ? (data.revenue / maxRevenue) * 100 : 0;
@@ -2889,7 +2892,7 @@ const SalonApp = () => {
                 sortedDailyData.map((day, idx) => {
                   const maxRevenue = Math.max(
                     ...sortedDailyData.map((d) => d.revenue),
-                    1
+                    1,
                   );
                   const heightPercent = (day.revenue / maxRevenue) * 100;
 
@@ -2937,7 +2940,7 @@ const SalonApp = () => {
                   {(() => {
                     const total = Object.values(serviceStats).reduce(
                       (sum, s) => sum + s.count,
-                      0
+                      0,
                     );
                     const colors = [
                       "#FF6B6B",
@@ -3009,7 +3012,7 @@ const SalonApp = () => {
                 .map(([service, data], idx) => {
                   const total = Object.values(serviceStats).reduce(
                     (sum, s) => sum + s.count,
-                    0
+                    0,
                   );
                   const percentage = ((data.count / total) * 100).toFixed(1);
                   const colors = [
@@ -3099,14 +3102,14 @@ const SalonApp = () => {
 
         if (querySnapshot.empty) {
           alert(
-            `⚠️ La colección '${nombreColeccion}' está vacía o no existe en este proyecto.`
+            `⚠️ La colección '${nombreColeccion}' está vacía o no existe en este proyecto.`,
           );
           return;
         }
 
         // Extraemos los datos guardando el ID original como "_id"
         // Esto es vital para que al subirlo, las recetas no se rompan.
-        const listaServicios = querySnapshot.docs.map((doc) => ({
+        const listaServicios = querySnapshot.docs.map((doc: any) => ({
           _id: doc.id,
           ...doc.data(),
         }));
@@ -3129,15 +3132,15 @@ const SalonApp = () => {
         document.body.removeChild(link);
 
         alert(
-          `✅ ¡Éxito! Se han descargado ${listaServicios.length} servicios en 'solo_catalogo.json'.`
+          `✅ ¡Éxito! Se han descargado ${listaServicios.length} servicios en 'solo_catalogo.json'.`,
         );
         showNotification(
-          `Catálogo descargado: ${listaServicios.length} servicios`
+          `Catálogo descargado: ${listaServicios.length} servicios`,
         );
       } catch (error) {
         console.error("Error al descargar:", error);
         alert(
-          "❌ Error. ¿Estás seguro de que tienes las credenciales del proyecto REAL?"
+          "❌ Error. ¿Estás seguro de que tienes las credenciales del proyecto REAL?",
         );
         showNotification("Error al descargar catálogo", "error");
       }
@@ -3189,7 +3192,7 @@ const SalonApp = () => {
     // Actualizar comisión de usuario
     const updateUserCommission = async (
       userId: string,
-      newCommission: number
+      newCommission: number,
     ) => {
       if (
         !Number.isFinite(newCommission) ||
@@ -3231,7 +3234,7 @@ const SalonApp = () => {
     const deleteUserPermanently = async (userId: string) => {
       if (
         !window.confirm(
-          "¿Eliminar este usuario permanentemente? Esta acción no se puede deshacer."
+          "¿Eliminar este usuario permanentemente? Esta acción no se puede deshacer.",
         )
       )
         return;
@@ -3276,7 +3279,7 @@ const SalonApp = () => {
 
     const updateCatalogService = async (
       id: string,
-      updated: Partial<CatalogService>
+      updated: Partial<CatalogService>,
     ) => {
       try {
         await updateDoc(doc(db, "catalog_services", id), updated);
@@ -3426,7 +3429,7 @@ const SalonApp = () => {
 
     const updateConsumable = async (
       id: string,
-      updated: Partial<Consumable>
+      updated: Partial<Consumable>,
     ) => {
       try {
         await updateDoc(doc(db, "consumables", id), updated);
@@ -3450,7 +3453,7 @@ const SalonApp = () => {
     };
 
     const lowStockConsumables = consumables.filter(
-      (c) => c.active && c.stockQty <= c.minStockAlert
+      (c) => c.active && c.stockQty <= c.minStockAlert,
     );
 
     return (
@@ -3650,7 +3653,7 @@ const SalonApp = () => {
                                 defaultValue={cs.basePrice}
                                 onChange={(e) =>
                                   (editedCS.basePrice = parseFloat(
-                                    e.target.value
+                                    e.target.value,
                                   ))
                                 }
                                 className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-purple-500 focus:outline-none"
@@ -3885,7 +3888,7 @@ const SalonApp = () => {
                                 defaultValue={c.unitCost}
                                 onChange={(e) =>
                                   (editedC.unitCost = parseFloat(
-                                    e.target.value
+                                    e.target.value,
                                   ))
                                 }
                                 className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-purple-500 focus:outline-none"
@@ -3897,7 +3900,7 @@ const SalonApp = () => {
                                 defaultValue={c.stockQty}
                                 onChange={(e) =>
                                   (editedC.stockQty = parseFloat(
-                                    e.target.value
+                                    e.target.value,
                                   ))
                                 }
                                 className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-purple-500 focus:outline-none"
@@ -3909,7 +3912,7 @@ const SalonApp = () => {
                                 defaultValue={c.minStockAlert}
                                 onChange={(e) =>
                                   (editedC.minStockAlert = parseFloat(
-                                    e.target.value
+                                    e.target.value,
                                   ))
                                 }
                                 className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-purple-500 focus:outline-none"
@@ -4084,7 +4087,7 @@ const SalonApp = () => {
                                 onClick={() =>
                                   updateUserCommission(
                                     user.id,
-                                    parseFloat(editingCommissionValue)
+                                    parseFloat(editingCommissionValue),
                                   )
                                 }
                                 className="text-green-600 hover:text-green-800"
@@ -4107,7 +4110,7 @@ const SalonApp = () => {
                                 onClick={() => {
                                   setEditingUserCommission(user.id);
                                   setEditingCommissionValue(
-                                    user.commissionPct.toString()
+                                    user.commissionPct.toString(),
                                   );
                                 }}
                                 className="text-blue-600 hover:text-blue-800"
@@ -4260,15 +4263,15 @@ const SalonApp = () => {
                               <button
                                 onClick={() => {
                                   const nameInput = document.getElementById(
-                                    `edit-name-${extra.id}`
+                                    `edit-name-${extra.id}`,
                                   ) as HTMLInputElement;
                                   const priceInput = document.getElementById(
-                                    `edit-price-${extra.id}`
+                                    `edit-price-${extra.id}`,
                                   ) as HTMLInputElement;
                                   updateExtra(
                                     extra.id,
                                     nameInput.value,
-                                    parseFloat(priceInput.value) || 0
+                                    parseFloat(priceInput.value) || 0,
                                   );
                                 }}
                                 className="text-green-600 hover:text-green-800"
