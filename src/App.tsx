@@ -54,6 +54,7 @@ type User = {
   pin: string;
   role: Role;
   color: string;
+  ow;
   icon: "crown" | "user";
   commissionPct: number;
   active: boolean;
@@ -287,7 +288,9 @@ const SalonApp = () => {
     search: "",
   });
 
-  const [ownerTab, setOwnerTab] = useState<"dashboard" | "config">("dashboard");
+  const [ownerTab, setOwnerTab] = useState<
+    "dashboard" | "config" | "analytics"
+  >("dashboard");
 
   const [editingCatalogService, setEditingCatalogService] = useState<
     string | null
@@ -695,11 +698,31 @@ const SalonApp = () => {
   useEffect(() => {
     if (!initialized) return;
     const q = query(collection(db, "catalog_extras"), orderBy("name", "asc"));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(q, async (snap) => {
       const data = snap.docs.map(
         (d) => ({ id: d.id, ...d.data() } as CatalogExtra)
       );
       setCatalogExtras(data);
+
+      // Sincronizar precios automáticamente desde EXTRAS_CATALOG
+      for (const extra of data) {
+        const catalogExtra = EXTRAS_CATALOG.find((e) => e.id === extra.id);
+        const currentPrice = (extra as any).price || extra.priceSuggested || 0;
+
+        if (catalogExtra && (!currentPrice || currentPrice === 0)) {
+          try {
+            await updateDoc(doc(db, "catalog_extras", extra.id), {
+              price: catalogExtra.priceSuggested,
+              priceSuggested: catalogExtra.priceSuggested,
+            });
+            console.log(
+              `✅ Sincronizado: ${extra.name} - $${catalogExtra.priceSuggested}`
+            );
+          } catch (error) {
+            console.error(`❌ Error sincronizando ${extra.name}:`, error);
+          }
+        }
+      }
     });
     return () => unsub();
   }, [initialized]);
@@ -1719,8 +1742,9 @@ const SalonApp = () => {
     const [newExpense, setNewExpense] = useState({
       date: new Date().toISOString().split("T")[0],
       description: "",
-      category: "",
+      category: "Agua",
       amount: "",
+      userId: "",
     });
 
     // ✅ NUEVO: Estado para editar servicios
@@ -1827,20 +1851,28 @@ const SalonApp = () => {
     });
 
     const totalRevenue = filteredServices.reduce((sum, s) => sum + s.cost, 0);
-    const totalExpenses = filteredExpenses.reduce(
-      (sum, e) => sum + e.amount,
-      0
-    );
+    const totalExpenses = filteredExpenses
+      .filter((e) => e.category !== "Comisiones")
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    // Calcular comisiones desde servicios (SIN restar gastos de comisiones pagadas)
     const totalCommissions = filteredServices.reduce(
       (sum, s) => sum + calcCommissionAmount(s),
       0
     );
 
-    const totalReplenishmentCost = filteredServices.reduce((sum, s) => {
+    let totalReplenishmentCost = filteredServices.reduce((sum, s) => {
       // ✅ NUEVO: Usar el valor guardado de reposición, o calcular basado en categoría para compatibilidad
       return sum + (s.reposicion || getRecipeCost(s.category));
     }, 0);
+    // Restar gastos de reposición
+    const reposicionExpenses = filteredExpenses.reduce((sum, e) => {
+      return e.category === "Reposicion" ? sum + e.amount : sum;
+    }, 0);
+    totalReplenishmentCost -= reposicionExpenses;
 
+    // Ganancia Neta = Ingresos - Gastos (sin comisiones) - Comisiones Ganadas - Reposición
+    // Los gastos de comisiones NO afectan la ganancia neta (solo son movimientos de dinero)
     const netProfit =
       totalRevenue - totalExpenses - totalCommissions - totalReplenishmentCost;
 
@@ -1875,6 +1907,7 @@ const SalonApp = () => {
           name: string;
           revenue: number;
           commission: number;
+          commissionPaid: number;
           services: number;
           color: string;
         }
@@ -1887,6 +1920,7 @@ const SalonApp = () => {
             name: s.userName,
             revenue: 0,
             commission: 0,
+            commissionPaid: 0,
             services: 0,
             color: user?.color || "from-gray-400 to-gray-600",
           };
@@ -1896,8 +1930,17 @@ const SalonApp = () => {
         stats[s.userId].services++;
       });
 
+      // Calcular comisiones pagadas desde los gastos
+      filteredExpenses.forEach((e) => {
+        if (e.category === "Comisiones" && e.userId) {
+          if (stats[e.userId]) {
+            stats[e.userId].commissionPaid += e.amount;
+          }
+        }
+      });
+
       return Object.values(stats).sort((a, b) => b.revenue - a.revenue);
-    }, [filteredServices, users]);
+    }, [filteredServices, filteredExpenses, users]);
 
     // ✅ NUEVO: Agregar gasto
     const addExpense = async () => {
@@ -1910,6 +1953,12 @@ const SalonApp = () => {
         return;
       }
 
+      // Validar que si es Comisiones, se seleccione un usuario
+      if (newExpense.category === "Comisiones" && !newExpense.userId) {
+        showNotification("Selecciona un personal para las comisiones", "error");
+        return;
+      }
+
       const amount = parseFloat(newExpense.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
         showNotification("Monto inválido", "error");
@@ -1917,20 +1966,36 @@ const SalonApp = () => {
       }
 
       try {
-        await addDoc(collection(db, "expenses"), {
+        const expenseData: any = {
           date: newExpense.date,
           description: newExpense.description.trim(),
           category: newExpense.category.trim(),
           amount,
           deleted: false,
           timestamp: serverTimestamp(),
+        };
+
+        // Agregar userId si es comisiones
+        if (newExpense.category === "Comisiones" && newExpense.userId) {
+          expenseData.userId = newExpense.userId;
+        }
+
+        const result = await addDoc(collection(db, "expenses"), expenseData);
+
+        // Log para confirmar que el gasto se guardó con la categoría correcta
+        console.log("Gasto guardado:", {
+          categoria: newExpense.category,
+          monto: amount,
+          userId: newExpense.userId || "N/A",
+          docId: result.id,
         });
 
         setNewExpense({
           date: new Date().toISOString().split("T")[0],
           description: "",
-          category: "",
+          category: "Agua",
           amount: "",
+          userId: "",
         });
         showNotification("Gasto agregado");
       } catch (error) {
@@ -2079,6 +2144,75 @@ const SalonApp = () => {
           </div>
         </div>
 
+        {/* Comisiones por Personal - Aparece ANTES de Gestión de Gastos */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Percent size={24} className="text-blue-500" />
+            Comisiones por Personal
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {userStats.length === 0 ? (
+              <div className="col-span-full text-center text-gray-500 py-8">
+                No hay datos disponibles
+              </div>
+            ) : (
+              userStats.map((stat) => (
+                <div
+                  key={stat.name}
+                  className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200 p-6"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-bold text-gray-800 text-lg">
+                      {stat.name}
+                    </h4>
+                    <span className="text-xs font-semibold bg-blue-200 text-blue-800 px-2 py-1 rounded-full">
+                      {stat.services} servicios
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="bg-white p-3 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">
+                        Ingresos Generados
+                      </p>
+                      <p className="text-2xl font-bold text-green-600">
+                        ${stat.revenue.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">
+                        Comisión Ganada
+                      </p>
+                      <p
+                        className={`text-2xl font-bold ${
+                          stat.commission - stat.commissionPaid < 0
+                            ? "text-red-600"
+                            : "text-blue-600"
+                        }`}
+                      >
+                        {stat.commission - stat.commissionPaid < 0 ? "-" : ""}$
+                        {Math.abs(
+                          stat.commission - stat.commissionPaid
+                        ).toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">
+                        Comisión Pagada
+                      </p>
+                      <p className="text-2xl font-bold text-orange-600">
+                        ${stat.commissionPaid.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         {/* ✅ NUEVO: Módulo de Gastos */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -2104,15 +2238,41 @@ const SalonApp = () => {
               }
               className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
             />
-            <input
-              type="text"
-              placeholder="Categoría"
+            <select
               value={newExpense.category}
               onChange={(e) =>
-                setNewExpense({ ...newExpense, category: e.target.value })
+                setNewExpense({
+                  ...newExpense,
+                  category: e.target.value,
+                  userId: "",
+                })
               }
               className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:outline-none text-gray-900 bg-white"
-            />
+            >
+              <option value="Agua">Agua</option>
+              <option value="Luz">Luz</option>
+              <option value="Renta">Renta</option>
+              <option value="Reposicion">Reposicion</option>
+              <option value="Comisiones">Comisiones</option>
+            </select>
+            {newExpense.category === "Comisiones" && (
+              <select
+                value={newExpense.userId}
+                onChange={(e) =>
+                  setNewExpense({ ...newExpense, userId: e.target.value })
+                }
+                className="px-4 py-2 border-2 border-purple-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white font-semibold"
+              >
+                <option value="">Seleccionar Personal</option>
+                {users
+                  .filter((u) => u.role === "staff")
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+              </select>
+            )}
             <input
               type="number"
               step="0.01"
@@ -2234,85 +2394,6 @@ const SalonApp = () => {
             </div>
           </div>
         )}
-
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Percent size={24} className="text-blue-500" />
-            Comisiones por Personal
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {userStats.length === 0 ? (
-              <div className="col-span-full text-center text-gray-500 py-8">
-                No hay datos disponibles
-              </div>
-            ) : (
-              userStats.map((stat) => (
-                <div
-                  key={stat.name}
-                  className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200 p-6"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-bold text-gray-800 text-lg">
-                      {stat.name}
-                    </h4>
-                    <span className="text-xs font-semibold bg-blue-200 text-blue-800 px-2 py-1 rounded-full">
-                      {stat.services} servicios
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-xs text-gray-500 mb-1">
-                        Ingresos Generados
-                      </p>
-                      <p className="text-2xl font-bold text-green-600">
-                        ${stat.revenue.toFixed(2)}
-                      </p>
-                    </div>
-
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-xs text-gray-500 mb-1">
-                        Comisión Ganada
-                      </p>
-                      <p className="text-2xl font-bold text-blue-600">
-                        ${stat.commission.toFixed(2)}
-                      </p>
-                    </div>
-
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-xs text-gray-500 mb-1">
-                        Promedio por Servicio
-                      </p>
-                      <p className="text-lg font-bold text-purple-600">
-                        ${(stat.commission / stat.services).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Resumen Total de Comisiones */}
-          <div className="mt-6 p-4 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg border-2 border-blue-300">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-semibold text-gray-700">
-                  Total de Comisiones Pagadas
-                </p>
-                <p className="text-3xl font-bold text-blue-600">
-                  ${totalCommissions.toFixed(2)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Personal Activo</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {users.filter((u) => u.role === "staff" && u.active).length}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="p-6 bg-gray-50 border-b flex justify-between items-center">
@@ -2443,7 +2524,10 @@ const SalonApp = () => {
                         ${calcCommissionAmount(service).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-sm font-bold text-orange-600">
-                        ${(service.reposicion || getRecipeCost(service.category)).toFixed(2)}
+                        $
+                        {(
+                          service.reposicion || getRecipeCost(service.category)
+                        ).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex gap-2">
@@ -2503,6 +2587,476 @@ const SalonApp = () => {
     );
   };
 
+  // ====== Analytics Tab ======
+  const AnalyticsTab = () => {
+    const [analyticsFilter, setAnalyticsFilter] = useState<
+      "week" | "month" | "year" | "custom"
+    >("week");
+    const [customDateFrom, setCustomDateFrom] = useState(
+      new Date().toISOString().split("T")[0]
+    );
+    const [customDateTo, setCustomDateTo] = useState(
+      new Date().toISOString().split("T")[0]
+    );
+
+    // Calcular rango de fechas según filtro
+    const getDateRange = () => {
+      const today = new Date();
+      let from = new Date();
+      let to = new Date(today);
+
+      switch (analyticsFilter) {
+        case "week":
+          from = new Date(today);
+          from.setDate(today.getDate() - today.getDay()); // Inicio de semana (domingo)
+          break;
+        case "month":
+          from = new Date(today.getFullYear(), today.getMonth(), 1);
+          break;
+        case "year":
+          from = new Date(today.getFullYear(), 0, 1);
+          break;
+        case "custom":
+          from = new Date(customDateFrom);
+          to = new Date(customDateTo);
+          break;
+      }
+
+      return {
+        from: from.toISOString().split("T")[0],
+        to: to.toISOString().split("T")[0],
+      };
+    };
+
+    const dateRange = getDateRange();
+
+    // Filtrar servicios en el rango
+    const filteredServices = services.filter((s) => {
+      if (s.deleted) return false;
+      return s.date >= dateRange.from && s.date <= dateRange.to;
+    });
+
+    // Calcular datos por día de semana
+    const weekdayData = {
+      Lunes: { revenue: 0, services: 0 },
+      Martes: { revenue: 0, services: 0 },
+      Miércoles: { revenue: 0, services: 0 },
+      Jueves: { revenue: 0, services: 0 },
+      Viernes: { revenue: 0, services: 0 },
+      Sábado: { revenue: 0, services: 0 },
+      Domingo: { revenue: 0, services: 0 },
+    };
+
+    const weekdayNames = [
+      "Domingo",
+      "Lunes",
+      "Martes",
+      "Miércoles",
+      "Jueves",
+      "Viernes",
+      "Sábado",
+    ];
+
+    filteredServices.forEach((s) => {
+      const date = new Date(s.date);
+      const dayName = weekdayNames[date.getDay()];
+      weekdayData[dayName as keyof typeof weekdayData].revenue += s.cost;
+      weekdayData[dayName as keyof typeof weekdayData].services += 1;
+    });
+
+    // Calcular datos diarios para gráfica de tendencia
+    const dailyData: Record<string, { revenue: number; services: number }> = {};
+    filteredServices.forEach((s) => {
+      if (!dailyData[s.date]) {
+        dailyData[s.date] = { revenue: 0, services: 0 };
+      }
+      dailyData[s.date].revenue += s.cost;
+      dailyData[s.date].services += 1;
+    });
+
+    const sortedDailyData = Object.entries(dailyData)
+      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+      .map(([date, data]) => ({
+        date: new Date(date).toLocaleDateString("es-ES", {
+          month: "short",
+          day: "numeric",
+        }),
+        revenue: data.revenue,
+        services: data.services,
+      }));
+
+    // Calcular métricas
+    const totalIncome = filteredServices.reduce((sum, s) => sum + s.cost, 0);
+    const totalServices = filteredServices.length;
+    const averageTicket = totalServices > 0 ? totalIncome / totalServices : 0;
+
+    // Empleada con más ingresos
+    const staffStats: Record<string, { revenue: number; services: number }> =
+      {};
+    filteredServices.forEach((s) => {
+      if (!staffStats[s.userName]) {
+        staffStats[s.userName] = { revenue: 0, services: 0 };
+      }
+      staffStats[s.userName].revenue += s.cost;
+      staffStats[s.userName].services += 1;
+    });
+
+    const topStaff = Object.entries(staffStats).sort(
+      ([, a], [, b]) => b.revenue - a.revenue
+    )[0];
+
+    // Servicio más vendido
+    const serviceStats: Record<string, { count: number; revenue: number }> = {};
+    filteredServices.forEach((s) => {
+      const serviceName =
+        s.services?.[0]?.serviceName || s.service || "Sin especificar";
+      if (!serviceStats[serviceName]) {
+        serviceStats[serviceName] = { count: 0, revenue: 0 };
+      }
+      serviceStats[serviceName].count += 1;
+      serviceStats[serviceName].revenue += s.cost;
+    });
+
+    const topService = Object.entries(serviceStats).sort(
+      ([, a], [, b]) => b.count - a.count
+    )[0];
+
+    return (
+      <div className="space-y-6">
+        {/* Filtros */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">Filtros</h3>
+          <div className="flex flex-wrap gap-3 mb-4">
+            <button
+              onClick={() => setAnalyticsFilter("week")}
+              className={`px-4 py-2 rounded-lg font-semibold transition ${
+                analyticsFilter === "week"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Esta semana
+            </button>
+            <button
+              onClick={() => setAnalyticsFilter("month")}
+              className={`px-4 py-2 rounded-lg font-semibold transition ${
+                analyticsFilter === "month"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Este mes
+            </button>
+            <button
+              onClick={() => setAnalyticsFilter("year")}
+              className={`px-4 py-2 rounded-lg font-semibold transition ${
+                analyticsFilter === "year"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Este año
+            </button>
+            <button
+              onClick={() => setAnalyticsFilter("custom")}
+              className={`px-4 py-2 rounded-lg font-semibold transition ${
+                analyticsFilter === "custom"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Personalizado
+            </button>
+          </div>
+
+          {analyticsFilter === "custom" && (
+            <div className="flex gap-4">
+              <input
+                type="date"
+                value={customDateFrom}
+                onChange={(e) => setCustomDateFrom(e.target.value)}
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none"
+              />
+              <input
+                type="date"
+                value={customDateTo}
+                onChange={(e) => setCustomDateTo(e.target.value)}
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none"
+              />
+            </div>
+          )}
+
+          <p className="text-sm text-gray-600 mt-4">
+            Período: <strong>{dateRange.from}</strong> a{" "}
+            <strong>{dateRange.to}</strong>
+          </p>
+        </div>
+
+        {/* Métricas principales */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-br from-green-400 to-green-600 text-white rounded-xl shadow-lg p-6">
+            <h4 className="text-sm font-semibold opacity-90">Total Ingresos</h4>
+            <p className="text-3xl font-bold mt-2">${totalIncome.toFixed(2)}</p>
+            <p className="text-green-100 text-xs mt-2">
+              {totalServices} servicios
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-blue-400 to-blue-600 text-white rounded-xl shadow-lg p-6">
+            <h4 className="text-sm font-semibold opacity-90">
+              Ticket Promedio
+            </h4>
+            <p className="text-3xl font-bold mt-2">
+              ${averageTicket.toFixed(2)}
+            </p>
+            <p className="text-blue-100 text-xs mt-2">por servicio</p>
+          </div>
+
+          <div className="bg-gradient-to-br from-orange-400 to-orange-600 text-white rounded-xl shadow-lg p-6">
+            <h4 className="text-sm font-semibold opacity-90">
+              Empleada Destaque
+            </h4>
+            <p className="text-2xl font-bold mt-2">{topStaff?.[0] || "N/A"}</p>
+            <p className="text-orange-100 text-xs mt-2">
+              ${topStaff?.[1].revenue.toFixed(2) || "0.00"}
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-pink-400 to-pink-600 text-white rounded-xl shadow-lg p-6">
+            <h4 className="text-sm font-semibold opacity-90">Servicio Top</h4>
+            <p className="text-2xl font-bold mt-2 truncate">
+              {topService?.[0] || "N/A"}
+            </p>
+            <p className="text-pink-100 text-xs mt-2">
+              {topService?.[1].count} servicios
+            </p>
+          </div>
+        </div>
+
+        {/* Gráfica por día de semana */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">
+            Ingresos por Día de Semana
+          </h3>
+          <div className="overflow-x-auto">
+            <div className="flex gap-4 pb-4" style={{ minWidth: "100%" }}>
+              {Object.entries(weekdayData)
+                .filter(([day]) => day !== "Domingo")
+                .map(([day, data]) => {
+                  const maxRevenue = Math.max(
+                    ...Object.values(weekdayData).map((d) => d.revenue)
+                  );
+                  const heightPercent =
+                    maxRevenue > 0 ? (data.revenue / maxRevenue) * 100 : 0;
+
+                  return (
+                    <div key={day} className="flex-1 min-w-20">
+                      <div className="flex flex-col items-center gap-2">
+                        <div
+                          className="w-full bg-gray-100 rounded-lg relative"
+                          style={{ height: "200px" }}
+                        >
+                          <div
+                            className="bg-gradient-to-t from-purple-500 to-purple-300 rounded-lg absolute bottom-0 w-full transition-all duration-300"
+                            style={{ height: `${heightPercent}%` }}
+                          />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700">
+                          {day}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          ${data.revenue.toFixed(0)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {data.services} servicios
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+
+        {/* Gráfica de tendencia diaria */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">
+            Tendencia Diaria
+          </h3>
+          <div className="overflow-x-auto">
+            <div className="flex gap-2 pb-4" style={{ minWidth: "100%" }}>
+              {sortedDailyData.length > 0 ? (
+                sortedDailyData.map((day, idx) => {
+                  const maxRevenue = Math.max(
+                    ...sortedDailyData.map((d) => d.revenue),
+                    1
+                  );
+                  const heightPercent = (day.revenue / maxRevenue) * 100;
+
+                  return (
+                    <div key={idx} className="flex-1 min-w-16">
+                      <div className="flex flex-col items-center gap-2">
+                        <div
+                          className="w-full bg-gray-100 rounded-lg relative"
+                          style={{ height: "150px" }}
+                        >
+                          <div
+                            className="bg-gradient-to-t from-blue-500 to-blue-300 rounded-lg absolute bottom-0 w-full transition-all duration-300"
+                            style={{ height: `${heightPercent}%` }}
+                          />
+                        </div>
+                        <p className="text-xs font-semibold text-gray-700">
+                          {day.date}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          ${day.revenue.toFixed(0)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-gray-500 text-center w-full">
+                  Sin datos disponibles
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Gráfica de dona - Servicios más vendidos */}
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">
+            Servicios Más Vendidos
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Dona */}
+            <div className="flex justify-center items-center">
+              {Object.entries(serviceStats).length > 0 ? (
+                <svg width="200" height="200" viewBox="0 0 200 200">
+                  {(() => {
+                    const total = Object.values(serviceStats).reduce(
+                      (sum, s) => sum + s.count,
+                      0
+                    );
+                    const colors = [
+                      "#FF6B6B",
+                      "#4ECDC4",
+                      "#45B7D1",
+                      "#FFA07A",
+                      "#98D8C8",
+                      "#F7DC6F",
+                      "#BB8FCE",
+                      "#85C1E2",
+                    ];
+                    let currentAngle = -90;
+
+                    return Object.entries(serviceStats)
+                      .sort(([, a], [, b]) => b.count - a.count)
+                      .map(([service, data], idx) => {
+                        const percentage = (data.count / total) * 100;
+                        const sliceAngle = (data.count / total) * 360;
+                        const startAngle = currentAngle;
+                        const endAngle = currentAngle + sliceAngle;
+                        currentAngle = endAngle;
+
+                        const startRad = (startAngle * Math.PI) / 180;
+                        const endRad = (endAngle * Math.PI) / 180;
+                        const innerRadius = 60;
+                        const outerRadius = 90;
+
+                        const x1Inner = 100 + innerRadius * Math.cos(startRad);
+                        const y1Inner = 100 + innerRadius * Math.sin(startRad);
+                        const x2Inner = 100 + innerRadius * Math.cos(endRad);
+                        const y2Inner = 100 + innerRadius * Math.sin(endRad);
+
+                        const x1Outer = 100 + outerRadius * Math.cos(startRad);
+                        const y1Outer = 100 + outerRadius * Math.sin(startRad);
+                        const x2Outer = 100 + outerRadius * Math.cos(endRad);
+                        const y2Outer = 100 + outerRadius * Math.sin(endRad);
+
+                        const largeArc = sliceAngle > 180 ? 1 : 0;
+
+                        const pathData = [
+                          `M ${x1Outer} ${y1Outer}`,
+                          `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2Outer} ${y2Outer}`,
+                          `L ${x2Inner} ${y2Inner}`,
+                          `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x1Inner} ${y1Inner}`,
+                          "Z",
+                        ].join(" ");
+
+                        return (
+                          <path
+                            key={idx}
+                            d={pathData}
+                            fill={colors[idx % colors.length]}
+                            stroke="white"
+                            strokeWidth="2"
+                          />
+                        );
+                      });
+                  })()}
+                </svg>
+              ) : (
+                <p className="text-gray-500">Sin datos disponibles</p>
+              )}
+            </div>
+
+            {/* Leyenda y detalles */}
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {Object.entries(serviceStats)
+                .sort(([, a], [, b]) => b.count - a.count)
+                .map(([service, data], idx) => {
+                  const total = Object.values(serviceStats).reduce(
+                    (sum, s) => sum + s.count,
+                    0
+                  );
+                  const percentage = ((data.count / total) * 100).toFixed(1);
+                  const colors = [
+                    "#FF6B6B",
+                    "#4ECDC4",
+                    "#45B7D1",
+                    "#FFA07A",
+                    "#98D8C8",
+                    "#F7DC6F",
+                    "#BB8FCE",
+                    "#85C1E2",
+                  ];
+
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div
+                        className="w-4 h-4 rounded-full"
+                        style={{
+                          backgroundColor: colors[idx % colors.length],
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-800 truncate">
+                          {service}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {data.count} servicios • ${data.revenue.toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-800">
+                          {percentage}%
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ====== Owner Config Tab ======
   const OwnerConfigTab = () => {
     const [newCatalogService, setNewCatalogService] = useState({
@@ -2519,6 +3073,10 @@ const SalonApp = () => {
       minStockAlert: "",
     });
 
+    const [editingExtraId, setEditingExtraId] = useState<string | null>(null);
+    const [newExtraName, setNewExtraName] = useState("");
+    const [newExtraPrice, setNewExtraPrice] = useState("");
+
     const [newUser, setNewUser] = useState({
       name: "",
       pin: "",
@@ -2530,6 +3088,60 @@ const SalonApp = () => {
       string | null
     >(null);
     const [editingCommissionValue, setEditingCommissionValue] = useState("");
+
+    // Descargar catálogo de servicios
+    const descargarCatalogoFaltante = async () => {
+      const nombreColeccion = "catalog_services"; // El nombre exacto que me diste
+
+      try {
+        console.log("⏳ Conectando a la base de datos real...");
+        const querySnapshot = await getDocs(collection(db, nombreColeccion));
+
+        if (querySnapshot.empty) {
+          alert(
+            `⚠️ La colección '${nombreColeccion}' está vacía o no existe en este proyecto.`
+          );
+          return;
+        }
+
+        // Extraemos los datos guardando el ID original como "_id"
+        // Esto es vital para que al subirlo, las recetas no se rompan.
+        const listaServicios = querySnapshot.docs.map((doc) => ({
+          _id: doc.id,
+          ...doc.data(),
+        }));
+
+        // Preparamos el objeto final
+        const backupJson = {
+          catalog_services: listaServicios,
+        };
+
+        // Generamos la descarga del archivo
+        const blob = new Blob([JSON.stringify(backupJson, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "solo_catalogo.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        alert(
+          `✅ ¡Éxito! Se han descargado ${listaServicios.length} servicios en 'solo_catalogo.json'.`
+        );
+        showNotification(
+          `Catálogo descargado: ${listaServicios.length} servicios`
+        );
+      } catch (error) {
+        console.error("Error al descargar:", error);
+        alert(
+          "❌ Error. ¿Estás seguro de que tienes las credenciales del proyecto REAL?"
+        );
+        showNotification("Error al descargar catálogo", "error");
+      }
+    };
 
     // Crear nuevo usuario
     const createNewUser = async () => {
@@ -2693,6 +3305,71 @@ const SalonApp = () => {
         showNotification("Servicio eliminado");
       } catch (error) {
         console.error("Error eliminando servicio:", error);
+        showNotification("Error al eliminar", "error");
+      }
+    };
+
+    // Funciones para gestionar extras
+    const addExtra = async () => {
+      if (!newExtraName || !newExtraPrice) {
+        showNotification("Completa todos los campos", "error");
+        return;
+      }
+      const price = parseFloat(newExtraPrice);
+      if (!Number.isFinite(price) || price < 0) {
+        showNotification("Precio inválido", "error");
+        return;
+      }
+      try {
+        await addDoc(collection(db, "catalog_extras"), {
+          name: newExtraName.trim(),
+          price,
+          priceSuggested: price,
+          appliesToCategories: ["manicura", "pedicura"],
+          active: true,
+          createdAt: serverTimestamp(),
+        });
+        setNewExtraName("");
+        setNewExtraPrice("");
+        showNotification("Extra agregado");
+      } catch (error) {
+        console.error("Error agregando extra:", error);
+        showNotification("Error al agregar", "error");
+      }
+    };
+
+    const updateExtra = async (id: string, name: string, price: number) => {
+      try {
+        await updateDoc(doc(db, "catalog_extras", id), {
+          name,
+          price,
+          priceSuggested: price,
+        });
+        setEditingExtraId(null);
+        showNotification("Extra actualizado");
+      } catch (error) {
+        console.error("Error actualizando extra:", error);
+        showNotification("Error al actualizar", "error");
+      }
+    };
+
+    const toggleExtra = async (id: string, active: boolean) => {
+      try {
+        await updateDoc(doc(db, "catalog_extras", id), { active: !active });
+        showNotification(active ? "Extra desactivado" : "Extra activado");
+      } catch (error) {
+        console.error("Error actualizando extra:", error);
+        showNotification("Error al actualizar", "error");
+      }
+    };
+
+    const deleteExtra = async (id: string) => {
+      if (!window.confirm("¿Eliminar este extra?")) return;
+      try {
+        await deleteDoc(doc(db, "catalog_extras", id));
+        showNotification("Extra eliminado");
+      } catch (error) {
+        console.error("Error eliminando extra:", error);
         showNotification("Error al eliminar", "error");
       }
     };
@@ -3485,12 +4162,177 @@ const SalonApp = () => {
 
         {catalogTab === "extras" && (
           <div className="bg-white rounded-xl shadow-md p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">
-              Extras (Próximamente)
+            <h3 className="text-xl font-bold text-gray-800 mb-6">
+              Gestión de Extras
             </h3>
-            <p className="text-gray-600">
-              Aquí podrás gestionar extras como diseños, decoraciones, etc.
-            </p>
+
+            {/* Form agregar extra */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+              <h4 className="font-semibold text-gray-700 mb-3">
+                Agregar Nuevo Extra
+              </h4>
+              <div className="flex gap-2 flex-wrap items-end">
+                <input
+                  type="text"
+                  placeholder="Nombre del extra"
+                  value={newExtraName}
+                  onChange={(e) => setNewExtraName(e.target.value)}
+                  className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Precio por uña"
+                  value={newExtraPrice}
+                  onChange={(e) => setNewExtraPrice(e.target.value)}
+                  className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none text-gray-900 bg-white"
+                />
+                <button
+                  onClick={addExtra}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-lg hover:shadow-lg transition font-semibold"
+                >
+                  Agregar
+                </button>
+              </div>
+            </div>
+
+            {/* Tabla de extras */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Nombre
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Precio/Uña
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Estado
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogExtras.map((extra) => {
+                    const price =
+                      (extra as any).price || extra.priceSuggested || 0;
+                    return (
+                      <tr
+                        key={extra.id}
+                        className={`border-b hover:bg-gray-50 transition ${
+                          !extra.active ? "opacity-60" : ""
+                        }`}
+                      >
+                        {editingExtraId === extra.id ? (
+                          <>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                defaultValue={extra.name || ""}
+                                id={`edit-name-${extra.id}`}
+                                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-purple-500 focus:outline-none w-full"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                step="0.01"
+                                defaultValue={price}
+                                id={`edit-price-${extra.id}`}
+                                className="px-2 py-1 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-purple-500 focus:outline-none w-20"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                  extra.active
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}
+                              >
+                                {extra.active ? "Activo" : "Inactivo"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 flex gap-2">
+                              <button
+                                onClick={() => {
+                                  const nameInput = document.getElementById(
+                                    `edit-name-${extra.id}`
+                                  ) as HTMLInputElement;
+                                  const priceInput = document.getElementById(
+                                    `edit-price-${extra.id}`
+                                  ) as HTMLInputElement;
+                                  updateExtra(
+                                    extra.id,
+                                    nameInput.value,
+                                    parseFloat(priceInput.value) || 0
+                                  );
+                                }}
+                                className="text-green-600 hover:text-green-800"
+                              >
+                                <Save size={18} />
+                              </button>
+                              <button
+                                onClick={() => setEditingExtraId(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                              >
+                                <X size={18} />
+                              </button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-3 font-semibold text-gray-900">
+                              {extra.name || "Sin nombre"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">
+                              ${price.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-bold cursor-pointer ${
+                                  extra.active
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}
+                                onClick={() =>
+                                  toggleExtra(extra.id, extra.active)
+                                }
+                              >
+                                {extra.active ? "Activo" : "Inactivo"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 flex gap-2">
+                              <button
+                                onClick={() => setEditingExtraId(extra.id)}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
+                                <Edit2 size={18} />
+                              </button>
+                              <button
+                                onClick={() => deleteExtra(extra.id)}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {catalogExtras.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                No hay extras registrados
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -3533,6 +4375,16 @@ const SalonApp = () => {
               Dashboard
             </button>
             <button
+              onClick={() => setOwnerTab("analytics")}
+              className={`px-6 py-3 rounded-lg font-semibold transition ${
+                ownerTab === "analytics"
+                  ? "bg-purple-600 text-white shadow-lg"
+                  : "bg-white text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Análisis
+            </button>
+            <button
               onClick={() => setOwnerTab("config")}
               className={`px-6 py-3 rounded-lg font-semibold transition ${
                 ownerTab === "config"
@@ -3544,7 +4396,9 @@ const SalonApp = () => {
             </button>
           </div>
 
-          {ownerTab === "dashboard" ? <OwnerDashboard /> : <OwnerConfigTab />}
+          {ownerTab === "dashboard" && <OwnerDashboard />}
+          {ownerTab === "analytics" && <AnalyticsTab />}
+          {ownerTab === "config" && <OwnerConfigTab />}
         </div>
       </div>
     );
