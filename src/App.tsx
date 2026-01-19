@@ -604,7 +604,15 @@ const SalonApp = () => {
         const data = snap.docs.map((d) =>
           normalizeUser({ id: d.id, ...d.data() }),
         );
-        setUsers(data);
+
+        // Sort users: "Principal" first, then others alphabetically
+        const sortedData = data.sort((a, b) => {
+          if (a.name === "Principal") return -1;
+          if (b.name === "Principal") return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        setUsers(sortedData);
         setLoading(false);
       },
       (error) => {
@@ -941,9 +949,16 @@ const SalonApp = () => {
     const [showExtrasSelector, setShowExtrasSelector] = useState(false);
     const [selectedServiceId, setSelectedServiceId] = useState("");
 
-    const userServices = services.filter(
-      (s) => s.userId === currentUser?.id && !s.deleted,
-    );
+    // Filter services for current staff user
+    // Staff users can only see today's services (auto-resets at midnight)
+    const today = new Date().toISOString().split("T")[0];
+    const userServices = services.filter((s) => {
+      // Filter by user ID and exclude deleted
+      if (s.userId !== currentUser?.id || s.deleted) return false;
+
+      // Only show today's services for staff users
+      return s.date === today;
+    });
 
     const filteredServices = userServices.filter((s) => {
       const matchSearch =
@@ -1492,37 +1507,6 @@ const SalonApp = () => {
             <p className="text-green-100 text-sm mt-1">servicios completados</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <input
-                type="date"
-                value={filters.dateFrom}
-                onChange={(e) =>
-                  setFilters({ ...filters, dateFrom: e.target.value })
-                }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none text-gray-900 bg-white"
-                placeholder="Desde"
-              />
-              <input
-                type="date"
-                value={filters.dateTo}
-                onChange={(e) =>
-                  setFilters({ ...filters, dateTo: e.target.value })
-                }
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none text-gray-900 bg-white"
-                placeholder="Hasta"
-              />
-              <button
-                onClick={() =>
-                  setFilters({ search: "", dateFrom: "", dateTo: "" })
-                }
-                className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition"
-              >
-                Limpiar Filtros
-              </button>
-            </div>
-          </div>
-
           <div className="bg-white rounded-xl shadow-md overflow-hidden">
             <div className="p-6 bg-gray-50 border-b flex justify-between items-center">
               <h2 className="text-xl font-bold text-gray-800">Mis Servicios</h2>
@@ -1878,30 +1862,6 @@ const SalonApp = () => {
     // Los gastos de comisiones NO afectan la ganancia neta (solo son movimientos de dinero)
     const netProfit =
       totalRevenue - totalExpenses - totalCommissions - totalReplenishmentCost;
-
-    const consumableUsage = useMemo(() => {
-      const usage: Record<string, { count: number; category: string }> = {};
-
-      filteredServices.forEach((s) => {
-        if (s.category) {
-          const key = s.category;
-          if (!usage[key]) {
-            usage[key] = { count: 0, category: s.category };
-          }
-          usage[key].count++;
-        }
-      });
-
-      return Object.entries(usage)
-        .map(([category, data]) => ({
-          category,
-          count: data.count,
-          totalCost:
-            data.count *
-            getRecipeCost(data.category as "manicura" | "pedicura"),
-        }))
-        .sort((a, b) => b.count - a.count);
-    }, [filteredServices]);
 
     const userStats = useMemo(() => {
       const stats: Record<
@@ -2356,48 +2316,6 @@ const SalonApp = () => {
           </div>
         </div>
 
-        {consumableUsage.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <TrendingUp size={24} className="text-orange-500" />
-              Consumibles Más Usados
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">
-                      Categoría
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">
-                      Servicios
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">
-                      Costo Total
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {consumableUsage.map((item) => (
-                    <tr
-                      key={item.category}
-                      className="border-b hover:bg-gray-50"
-                    >
-                      <td className="px-6 py-4 text-sm font-medium capitalize">
-                        {item.category}
-                      </td>
-                      <td className="px-6 py-4 text-sm">{item.count}</td>
-                      <td className="px-6 py-4 text-sm font-bold text-orange-600">
-                        ${item.totalCost.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="p-6 bg-gray-50 border-b flex justify-between items-center">
             <h3 className="text-xl font-bold text-gray-800">
@@ -2611,7 +2529,14 @@ const SalonApp = () => {
       switch (analyticsFilter) {
         case "week":
           from = new Date(today);
-          from.setDate(today.getDate() - today.getDay()); // Inicio de semana (domingo)
+          // Calcular el lunes de la semana actual
+          const dayOfWeek = today.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+          const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Si es domingo, retroceder 6 días
+          from.setDate(today.getDate() - daysToMonday);
+
+          // Calcular el domingo de la semana actual
+          to = new Date(from);
+          to.setDate(from.getDate() + 6);
           break;
         case "month":
           from = new Date(today.getFullYear(), today.getMonth(), 1);
