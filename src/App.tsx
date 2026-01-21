@@ -1020,7 +1020,7 @@ const SalonApp = () => {
 
     // ✅ NUEVO: Actualizar cantidad de uñas por extra desde la lista
     const updateExtraNailsCount = (extraId: string, nailsCount: number) => {
-      const extra = EXTRAS_CATALOG.find((e) => e.id === extraId);
+      const extra = catalogExtras.find((e) => e.id === extraId);
       if (!extra) return;
 
       if (!Number.isFinite(nailsCount) || nailsCount < 0) {
@@ -1033,12 +1033,14 @@ const SalonApp = () => {
         if (nailsCount === 0) {
           return { ...prev, extras: filtered };
         }
+        // Use price or priceSuggested from Firebase extra
+        const pricePerNail = (extra as any).price || extra.priceSuggested || 0;
         const newExtraItem: ExtraItem = {
           extraId: extra.id,
           extraName: extra.name,
-          pricePerNail: extra.priceSuggested,
+          pricePerNail,
           nailsCount,
-          totalPrice: extra.priceSuggested * nailsCount,
+          totalPrice: pricePerNail * nailsCount,
         };
 
         return { ...prev, extras: [...filtered, newExtraItem] };
@@ -1391,42 +1393,52 @@ const SalonApp = () => {
               </p>
               {showExtrasSelector && (
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {EXTRAS_CATALOG.filter((e) => e.active).map((extra) => {
-                    const current = newService.extras.find(
-                      (e) => e.extraId === extra.id,
-                    );
-                    return (
-                      <div
-                        key={extra.id}
-                        className="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100"
-                      >
-                        <div>
-                          <p className="font-semibold text-gray-800">
-                            {extra.name}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            ${extra.priceSuggested.toFixed(2)} por uña
-                          </p>
+                  {catalogExtras
+                    .filter((e) => e.active)
+                    .map((extra) => {
+                      const current = newService.extras.find(
+                        (e) => e.extraId === extra.id,
+                      );
+                      return (
+                        <div
+                          key={extra.id}
+                          className="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100"
+                        >
+                          <div>
+                            <p className="font-semibold text-gray-800">
+                              {extra.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              $
+                              {(
+                                (extra as any).price ||
+                                extra.priceSuggested ||
+                                0
+                              ).toFixed(2)}{" "}
+                              por uña
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-gray-500">
+                              Uñas
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={10}
+                              value={current?.nailsCount ?? 0}
+                              onChange={(e) =>
+                                updateExtraNailsCount(
+                                  extra.id,
+                                  parseInt(e.target.value || "0", 10),
+                                )
+                              }
+                              className="w-20 px-3 py-2 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-blue-500 focus:outline-none"
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-xs text-gray-500">Uñas</label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={10}
-                            value={current?.nailsCount ?? 0}
-                            onChange={(e) =>
-                              updateExtraNailsCount(
-                                extra.id,
-                                parseInt(e.target.value || "0", 10),
-                              )
-                            }
-                            className="w-20 px-3 py-2 border-2 border-gray-300 rounded text-gray-900 bg-white focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
               )}
             </div>
@@ -2806,52 +2818,6 @@ const SalonApp = () => {
           </div>
         </div>
 
-        {/* Gráfica de tendencia diaria */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">
-            Tendencia Diaria
-          </h3>
-          <div className="overflow-x-auto">
-            <div className="flex gap-2 pb-4" style={{ minWidth: "100%" }}>
-              {sortedDailyData.length > 0 ? (
-                sortedDailyData.map((day, idx) => {
-                  const maxRevenue = Math.max(
-                    ...sortedDailyData.map((d) => d.revenue),
-                    1,
-                  );
-                  const heightPercent = (day.revenue / maxRevenue) * 100;
-
-                  return (
-                    <div key={idx} className="flex-1 min-w-16">
-                      <div className="flex flex-col items-center gap-2">
-                        <div
-                          className="w-full bg-gray-100 rounded-lg relative"
-                          style={{ height: "150px" }}
-                        >
-                          <div
-                            className="bg-gradient-to-t from-blue-500 to-blue-300 rounded-lg absolute bottom-0 w-full transition-all duration-300"
-                            style={{ height: `${heightPercent}%` }}
-                          />
-                        </div>
-                        <p className="text-xs font-semibold text-gray-700">
-                          {day.date}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          ${day.revenue.toFixed(0)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-gray-500 text-center w-full">
-                  Sin datos disponibles
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Gráfica de dona - Servicios más vendidos */}
         <div className="bg-white rounded-xl shadow-md p-6">
           <h3 className="text-lg font-bold text-gray-800 mb-4">
@@ -3253,7 +3219,6 @@ const SalonApp = () => {
           name: newExtraName.trim(),
           price,
           priceSuggested: price,
-          appliesToCategories: ["manicura", "pedicura"],
           active: true,
           createdAt: serverTimestamp(),
         });
