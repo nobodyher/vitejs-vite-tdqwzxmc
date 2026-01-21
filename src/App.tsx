@@ -158,6 +158,32 @@ type CatalogExtra = {
   active: boolean;
 };
 
+// ====== TIPOS INVENTARIO DE MATERIALES ======
+type ChemicalProduct = {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: "ml" | "kg" | "L";
+  purchasePrice: number;
+  yield: number;
+  costPerService: number;
+  stock: number;
+  minStock: number;
+  active: boolean;
+};
+
+type MaterialRecipe = {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  chemicalIds: string[];
+  chemicalsCost: number;
+  disposablesCost: number;
+  totalCost: number;
+  category: "manicura" | "pedicura";
+  active: boolean;
+};
+
 // ✅ NUEVO: Catálogo de extras con precios por uña
 const EXTRAS_CATALOG: CatalogExtra[] = [
   {
@@ -278,8 +304,12 @@ const SalonApp = () => {
   const [consumables, setConsumables] = useState<Consumable[]>([]);
   const [serviceRecipes, setServiceRecipes] = useState<ServiceRecipe[]>([]);
   const [catalogExtras, setCatalogExtras] = useState<CatalogExtra[]>([]);
+  const [chemicalProducts, setChemicalProducts] = useState<ChemicalProduct[]>(
+    [],
+  );
+  const [materialRecipes, setMaterialRecipes] = useState<MaterialRecipe[]>([]);
   const [catalogTab, setCatalogTab] = useState<
-    "personal" | "services" | "consumables" | "extras"
+    "personal" | "services" | "consumables" | "extras" | "materials"
   >("services");
 
   const [ownerFilters, setOwnerFilters] = useState<OwnerFilters>({
@@ -738,6 +768,35 @@ const SalonApp = () => {
     return () => unsub();
   }, [initialized]);
 
+  // Cargar productos químicos
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(
+      collection(db, "chemical_products"),
+      orderBy("name", "asc"),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as ChemicalProduct,
+      );
+      setChemicalProducts(data);
+    });
+    return () => unsub();
+  }, [initialized]);
+
+  // Cargar recetas de materiales
+  useEffect(() => {
+    if (!initialized) return;
+    const q = query(collection(db, "material_recipes"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as MaterialRecipe,
+      );
+      setMaterialRecipes(data);
+    });
+    return () => unsub();
+  }, [initialized]);
+
   // ====== Notificaciones ======
   const showNotification = (
     message: string,
@@ -990,15 +1049,6 @@ const SalonApp = () => {
       return servicesTotal + extrasTotal;
     };
 
-    // ✅ NUEVO: Calcular el costo total de reposición de todos los servicios
-    const calculateTotalReplenishmentCost = (
-      servicesList: ServiceItem[],
-    ): number => {
-      return servicesList.reduce((sum, s) => {
-        return sum + getRecipeCostByServiceId(s.serviceId);
-      }, 0);
-    };
-
     // ✅ NUEVO: Al seleccionar del catálogo, agregar a lista de servicios
     const selectCatalogService = (cs: CatalogService) => {
       console.log("Seleccionando servicio:", cs);
@@ -1115,6 +1165,40 @@ const SalonApp = () => {
       } catch (error) {
         console.log("Error descargando consumibles (no critico):", error);
       }
+    };
+
+    // ✅ NUEVO: Calcular costo total de reposición basado en recetas de materiales
+    const calculateTotalReplenishmentCost = (
+      services: ServiceItem[],
+    ): number => {
+      let totalCost = 0;
+
+      for (const service of services) {
+        // Buscar la receta del servicio en materialRecipes
+        const recipe = materialRecipes.find(
+          (r) =>
+            r.serviceName.toLowerCase() === service.serviceName.toLowerCase(),
+        );
+
+        if (recipe) {
+          // Si encontramos la receta, usar su costo total
+          totalCost += recipe.totalCost;
+        } else {
+          // Si no hay receta, usar el costo de desechables por defecto según categoría
+          // Intentar determinar la categoría del servicio
+          const serviceName = service.serviceName.toLowerCase();
+          if (
+            serviceName.includes("pedicure") ||
+            serviceName.includes("pedicura")
+          ) {
+            totalCost += 0.5; // Costo de desechables para pedicura
+          } else {
+            totalCost += 0.33; // Costo de desechables para manicura
+          }
+        }
+      }
+
+      return totalCost;
     };
 
     const addService = async () => {
@@ -3168,6 +3252,266 @@ const SalonApp = () => {
       }
     };
 
+    // ✅ TEMPORAL: Función para inicializar datos de materiales
+    const initializeMaterialsData = async () => {
+      if (
+        !window.confirm(
+          "¿Inicializar datos de materiales? Esto agregará 8 productos químicos y 6 recetas.",
+        )
+      )
+        return;
+
+      try {
+        // Productos químicos
+        const chemicalProductsData = [
+          {
+            name: "Primer Extra Bond",
+            quantity: 30,
+            unit: "ml",
+            purchasePrice: 11.5,
+            yield: 100,
+            costPerService: 0.115,
+            stock: 10,
+            minStock: 2,
+            active: true,
+          },
+          {
+            name: "Top Coat",
+            quantity: 15,
+            unit: "ml",
+            purchasePrice: 2.25,
+            yield: 25,
+            costPerService: 0.09,
+            stock: 15,
+            minStock: 3,
+            active: true,
+          },
+          {
+            name: "Base Coat",
+            quantity: 12,
+            unit: "ml",
+            purchasePrice: 2.5,
+            yield: 40,
+            costPerService: 0.0625,
+            stock: 12,
+            minStock: 3,
+            active: true,
+          },
+          {
+            name: "Color Gel (Tono base)",
+            quantity: 12,
+            unit: "ml",
+            purchasePrice: 2.5,
+            yield: 40,
+            costPerService: 0.0625,
+            stock: 20,
+            minStock: 5,
+            active: true,
+          },
+          {
+            name: "Gel Blanco (Francés)",
+            quantity: 12,
+            unit: "ml",
+            purchasePrice: 2.0,
+            yield: 40,
+            costPerService: 0.05,
+            stock: 8,
+            minStock: 2,
+            active: true,
+          },
+          {
+            name: "Base Rubber",
+            quantity: 12,
+            unit: "ml",
+            purchasePrice: 2.75,
+            yield: 15,
+            costPerService: 0.1833,
+            stock: 6,
+            minStock: 2,
+            active: true,
+          },
+          {
+            name: "Crema Humectante",
+            quantity: 1000,
+            unit: "kg",
+            purchasePrice: 10.25,
+            yield: 500,
+            costPerService: 0.0205,
+            stock: 3,
+            minStock: 1,
+            active: true,
+          },
+          {
+            name: "Alcohol",
+            quantity: 1,
+            unit: "L",
+            purchasePrice: 3.75,
+            yield: 200,
+            costPerService: 0.0188,
+            stock: 5,
+            minStock: 2,
+            active: true,
+          },
+        ];
+
+        for (const product of chemicalProductsData) {
+          await addDoc(collection(db, "chemical_products"), {
+            ...product,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        // Recetas de materiales
+        const materialRecipesData = [
+          {
+            serviceId: "manicura_gel_1_color",
+            serviceName: "Manicura en gel 1 solo color",
+            chemicalIds: [
+              "alcohol",
+              "extra_bond",
+              "base_coat",
+              "color_gel",
+              "top_coat",
+            ],
+            chemicalsCost: 0.35,
+            disposablesCost: 0.33,
+            totalCost: 0.68,
+            category: "manicura",
+            active: true,
+          },
+          {
+            serviceId: "manicura_diseño",
+            serviceName: "Manicura con diseño",
+            chemicalIds: ["base_gel", "diseño_insumos"],
+            chemicalsCost: 1.1,
+            disposablesCost: 0.33,
+            totalCost: 1.43,
+            category: "manicura",
+            active: true,
+          },
+          {
+            serviceId: "rubber_cortas_1_tono",
+            serviceName: "Rubber uñas cortas 1 tono",
+            chemicalIds: [
+              "alcohol",
+              "extra_bond",
+              "base_rubber",
+              "color_gel",
+              "top_coat",
+            ],
+            chemicalsCost: 0.47,
+            disposablesCost: 0.33,
+            totalCost: 0.8,
+            category: "manicura",
+            active: true,
+          },
+          {
+            serviceId: "rubber_largas_1_tono",
+            serviceName: "Rubber uñas largas 1 tono",
+            chemicalIds: [
+              "alcohol",
+              "extra_bond",
+              "base_rubber",
+              "color_gel",
+              "top_coat",
+            ],
+            chemicalsCost: 0.47,
+            disposablesCost: 0.33,
+            totalCost: 0.8,
+            category: "manicura",
+            active: true,
+          },
+          {
+            serviceId: "pedicure_1_tono",
+            serviceName: "Pedicure 1 tono",
+            chemicalIds: [
+              "alcohol",
+              "extra_bond",
+              "base_coat",
+              "color_gel",
+              "top_coat",
+              "crema",
+            ],
+            chemicalsCost: 0.37,
+            disposablesCost: 0.5,
+            totalCost: 0.87,
+            category: "pedicura",
+            active: true,
+          },
+          {
+            serviceId: "pedicure_francesa",
+            serviceName: "Pedicure francesa",
+            chemicalIds: [
+              "alcohol",
+              "extra_bond",
+              "base_coat",
+              "color_gel",
+              "gel_blanco",
+              "top_coat",
+              "crema",
+            ],
+            chemicalsCost: 0.42,
+            disposablesCost: 0.5,
+            totalCost: 0.92,
+            category: "pedicura",
+            active: true,
+          },
+        ];
+
+        for (const recipe of materialRecipesData) {
+          await addDoc(collection(db, "material_recipes"), {
+            ...recipe,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        showNotification(
+          "✅ Datos inicializados correctamente! (8 productos + 6 recetas)",
+        );
+      } catch (error) {
+        console.error("Error inicializando datos:", error);
+        showNotification("Error al inicializar datos", "error");
+      }
+    };
+
+    // Funciones para gestionar productos químicos
+    const updateChemicalProduct = async (
+      id: string,
+      updates: Partial<ChemicalProduct>,
+    ) => {
+      try {
+        // Si se actualizan precio o rendimiento, recalcular costPerService
+        if (
+          updates.purchasePrice !== undefined ||
+          updates.yield !== undefined
+        ) {
+          const product = chemicalProducts.find((p) => p.id === id);
+          if (product) {
+            const newPrice = updates.purchasePrice ?? product.purchasePrice;
+            const newYield = updates.yield ?? product.yield;
+            updates.costPerService = newPrice / newYield;
+          }
+        }
+
+        await updateDoc(doc(db, "chemical_products", id), updates);
+        showNotification("Producto actualizado");
+      } catch (error) {
+        console.error("Error actualizando producto:", error);
+        showNotification("Error al actualizar", "error");
+      }
+    };
+
+    const deleteChemicalProduct = async (id: string) => {
+      if (!window.confirm("¿Eliminar este producto químico?")) return;
+      try {
+        await deleteDoc(doc(db, "chemical_products", id));
+        showNotification("Producto eliminado");
+      } catch (error) {
+        console.error("Error eliminando producto:", error);
+        showNotification("Error al eliminar", "error");
+      }
+    };
+
     const updateCatalogService = async (
       id: string,
       updated: Partial<CatalogService>,
@@ -3420,6 +3764,16 @@ const SalonApp = () => {
             }`}
           >
             Extras
+          </button>
+          <button
+            onClick={() => setCatalogTab("materials")}
+            className={`px-6 py-3 rounded-t-lg font-semibold transition ${
+              catalogTab === "materials"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            Materiales
           </button>
         </div>
 
@@ -4226,6 +4580,216 @@ const SalonApp = () => {
                 No hay extras registrados
               </div>
             )}
+          </div>
+        )}
+
+        {catalogTab === "materials" && (
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-6">
+              Inventario de Materiales Químicos
+            </h3>
+
+            {/* Botón de inicialización (solo si no hay datos) */}
+            {chemicalProducts.length === 0 && (
+              <div className="mb-6 p-6 bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300 rounded-lg">
+                <h4 className="text-lg font-bold text-gray-800 mb-2">
+                  🚀 Inicialización Requerida
+                </h4>
+                <p className="text-gray-600 mb-4">
+                  Haz clic en el botón para agregar automáticamente 8 productos
+                  químicos y 6 recetas de servicios a Firebase.
+                </p>
+                <button
+                  onClick={initializeMaterialsData}
+                  className="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-lg hover:shadow-lg transition font-bold text-lg"
+                >
+                  ✨ Inicializar Datos de Materiales
+                </button>
+              </div>
+            )}
+
+            {/* Sección 1: Productos Químicos */}
+            <div className="mb-8">
+              <h4 className="text-lg font-semibold text-gray-700 mb-4">
+                Productos Químicos
+              </h4>
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-purple-50">
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Producto
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Cantidad
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Precio Compra
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Rendimiento
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Costo/Servicio
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Stock
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Estado
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chemicalProducts.map((product) => (
+                      <tr
+                        key={product.id}
+                        className="border-b hover:bg-gray-50"
+                      >
+                        <td className="px-4 py-3 font-semibold text-gray-900">
+                          {product.name}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {product.quantity} {product.unit}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          ${product.purchasePrice.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {product.yield} servicios
+                        </td>
+                        <td className="px-4 py-3 font-bold text-green-600">
+                          ${product.costPerService.toFixed(4)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-bold ${
+                              product.stock <= product.minStock
+                                ? "bg-red-100 text-red-700"
+                                : "bg-green-100 text-green-700"
+                            }`}
+                          >
+                            {product.stock} unidades
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-bold ${
+                              product.active
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {product.active ? "Activo" : "Inactivo"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 flex gap-2">
+                          <button
+                            onClick={() => {
+                              const newStock = prompt(
+                                `Stock actual de ${product.name}:`,
+                                product.stock.toString(),
+                              );
+                              if (newStock !== null) {
+                                const stockNum = parseInt(newStock);
+                                if (!isNaN(stockNum) && stockNum >= 0) {
+                                  updateChemicalProduct(product.id, {
+                                    stock: stockNum,
+                                  });
+                                }
+                              }
+                            }}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Actualizar Stock"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button
+                            onClick={() => deleteChemicalProduct(product.id)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {chemicalProducts.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  No hay productos químicos registrados. Los productos se
+                  agregarán automáticamente.
+                </div>
+              )}
+            </div>
+
+            {/* Sección 2: Recetas por Servicio */}
+            <div className="mt-8 pt-8 border-t-2 border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-700 mb-4">
+                Recetas de Servicios (Costo de Materiales)
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {materialRecipes.map((recipe) => (
+                  <div
+                    key={recipe.id}
+                    className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4 border-2 border-purple-200"
+                  >
+                    <h5 className="font-bold text-gray-800 mb-2">
+                      {recipe.serviceName}
+                    </h5>
+                    <div className="text-sm text-gray-600 mb-3">
+                      <span className="font-semibold">Categoría:</span>{" "}
+                      {recipe.category === "manicura" ? "Manicura" : "Pedicura"}
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Químicos:</span>
+                        <span className="font-semibold text-blue-600">
+                          ${recipe.chemicalsCost.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Desechables:</span>
+                        <span className="font-semibold text-orange-600">
+                          ${recipe.disposablesCost.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t border-purple-300">
+                        <span className="font-bold text-gray-800">TOTAL:</span>
+                        <span className="font-bold text-green-600 text-lg">
+                          ${recipe.totalCost.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {materialRecipes.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  No hay recetas configuradas. Las recetas se agregarán
+                  automáticamente.
+                </div>
+              )}
+            </div>
+
+            {/* Nota informativa */}
+            <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+              <p className="text-sm text-blue-800">
+                <strong>ℹ️ Información:</strong> Los costos de materiales se
+                calculan automáticamente cuando se registra un servicio y se
+                suman al campo de reposición. Los productos químicos y recetas
+                se inicializarán automáticamente en Firebase.
+              </p>
+            </div>
           </div>
         )}
       </div>
